@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiCat-S/mibot-lite/internal/bot"
 	"github.com/MiCat-S/mibot-lite/internal/command"
+	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
 )
 
 // .yvlu 的参数语法按位置解析，而且不规则；下面这些是用户早已用顺手的写法。
@@ -229,5 +230,19 @@ func TestPhotoFits(t *testing.T) {
 	}
 	if photoFits([]byte("garbage")) {
 		t.Error("解不出尺寸的数据不该当照片发")
+	}
+}
+
+// 一次最多 5 条，每种写法都一样，而且在读历史、调远程服务之前就挡下。这里的 Client 是
+// nil，只要走过了这一关去做事就会 panic。
+func TestYvluRefusesMoreThanFiveMessages(t *testing.T) {
+	service := &yvluService{}
+	for _, args := range [][]string{{"6"}, {"r", "6"}, {"r", "png", "10"}, {"u", "@someone", "6"}, {"image", "100"}} {
+		inv := &command.Invocation{Prefix: ".", Command: "yvlu", Args: args, Text: ".yvlu " + strings.Join(args, " "),
+			Log: slog.New(slog.DiscardHandler)}
+		err := service.handle(t.Context(), inv)
+		if text, ok := kit.IsUserError(err); !ok || !strings.Contains(text, "太多了") {
+			t.Errorf(".yvlu %s: %v", strings.Join(args, " "), err)
+		}
 	}
 }
