@@ -111,6 +111,9 @@ type Registry struct {
 	logger   *slog.Logger
 	sem      chan struct{}
 	inFlight sync.WaitGroup
+	// life 在 Abort 时取消，所有正在跑和排队的命令都挂在它上面。
+	life  context.Context
+	abort context.CancelFunc
 	// relayed 是账号替别人代发过的命令消息。它们已经按借用规则执行过一次；
 	// 万一之后又被当成本人发的消息收到，不能不经检查再执行一遍。
 	relayed map[string]time.Time
@@ -121,8 +124,14 @@ func New(prefixes []string, logger *slog.Logger) *Registry {
 	if len(prefixes) == 0 {
 		prefixes = []string{"."}
 	}
-	return &Registry{commands: map[string]*Command{}, prefixes: prefixes, logger: logger, sem: make(chan struct{}, 16)}
+	life, abort := context.WithCancel(context.Background())
+	return &Registry{commands: map[string]*Command{}, prefixes: prefixes, logger: logger, sem: make(chan struct{}, 16),
+		life: life, abort: abort}
 }
+
+// Abort 中断所有正在跑和排队的命令，之后收到的命令也不再执行。进程退出（包括重启）前调用：
+// 重启常常就是为了掐断卡住的命令，不能让它们拖着不退，也不该等它们跑完。
+func (r *Registry) Abort() { r.abort() }
 
 // Register 添加命令；名字重复属于编程错误。
 func (r *Registry) Register(commands ...*Command) {
@@ -377,22 +386,31 @@ func (r *Registry) run(ctx context.Context, client *bot.Client, message, trigger
 	}
 	inv := &Invocation{Prefix: route.Prefix, Command: route.Command, Args: route.Args, Text: route.Text,
 		Message: message, Client: client, Log: logger, Trigger: trigger}
+	if r.life.Err() != nil {
+		logger.Info("command.aborted", slog.String("chat", message.ChatID), slog.Int("message", message.ID), slog.String("reason", "shutting down"))
+		return
+	}
 	r.inFlight.Add(1)
 	go func() {
 		defer r.inFlight.Done()
+		// 命令的 ctx 本身不随更新引擎取消（命令要比派发它的那次调用活得久），
+		// 所以另外挂在 life 上，Abort 时一起取消。
+		live, stop := context.WithCancel(ctx)
+		defer stop()
+		defer context.AfterFunc(r.life, stop)()
 		select {
 		case r.sem <- struct{}{}:
 			defer func() { <-r.sem }()
-		case <-ctx.Done():
+		case <-live.Done():
 			return
 		}
-		runCtx, cancel := ctx, context.CancelFunc(func() {})
+		runCtx, cancel := live, context.CancelFunc(func() {})
 		switch {
 		case command.Timeout < 0:
 		case command.Timeout == 0:
-			runCtx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+			runCtx, cancel = context.WithTimeout(live, 5*time.Minute)
 		default:
-			runCtx, cancel = context.WithTimeout(ctx, command.Timeout)
+			runCtx, cancel = context.WithTimeout(live, command.Timeout)
 		}
 		defer cancel()
 		defer func() {
@@ -413,6 +431,9 @@ func (r *Registry) run(ctx context.Context, client *bot.Client, message, trigger
 		switch {
 		case err == nil:
 			inv.Log.Info("command.handled", slog.String("chat", message.ChatID), slog.Int("message", message.ID), slog.Duration("took", time.Since(started)))
+		case r.life.Err() != nil:
+			// 进程要退出了：不回「执行失败」，连接也正在关，发不出去。
+			inv.Log.Info("command.aborted", slog.String("chat", message.ChatID), slog.Int("message", message.ID), slog.Duration("took", time.Since(started)))
 		case ctx.Err() != nil:
 		case errors.Is(err, context.DeadlineExceeded):
 			inv.Log.Warn("command.timeout", slog.String("chat", message.ChatID))

@@ -19,6 +19,8 @@ import (
 // 两种都最多重试 Attempts 次（teleproto 的 requestRetries，默认 5），之后把错误交给调用方。
 // 这两种错误都表示请求没被执行，重试不会重复操作。从 MiBox 移植来的命令都默认有这层
 // 保护，以前没有时，几秒的限流就会让整条命令失败。
+//
+// updates.getChannelDifference 例外，见 selfRecovering。
 type Retrier struct {
 	Logger   *slog.Logger
 	MaxWait  time.Duration
@@ -31,6 +33,19 @@ type Retrier struct {
 func serverFailure(err error) bool {
 	rpcErr, ok := tgerr.As(err)
 	return ok && (rpcErr.Code >= 500 || rpcErr.IsOneOf("RPC_CALL_FAIL", "RPC_MCGET_FAIL"))
+}
+
+// selfRecovering 判断请求是不是 gotd 更新引擎自己会补救的那种，这种请求原样交出失败，不重试。
+//
+// 更新引擎给每个群组开一个协程补抓漏掉的更新（updates.getChannelDifference），失败了它会
+// 在下一次发现缺口或空闲轮询时再补，不需要这里重试；而这里一重试，那个协程就被卡住：
+// 服务端错误要等 5 次 × 2 秒，限流更是每次等几秒到一分钟。协程卡住时它那个群组只有
+// 10 格缓冲，塞满后会挡住所有对话的更新，收藏夹里的命令也跟着没反应。2026-09-27
+// Telegram 连续十个小时对部分群组回 PERSISTENT_TIMESTAMP_OUTDATED，那天记了 1230 次这样的重试，
+// 整个账号时不时卡住。
+func selfRecovering(input bin.Encoder) bool {
+	_, ok := input.(*tg.UpdatesGetChannelDifferenceRequest)
+	return ok
 }
 
 // Handle 实现 telegram.Middleware。
@@ -49,6 +64,9 @@ func (f Retrier) Handle(next tg.Invoker) telegram.InvokeFunc {
 		}
 	}
 	return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
+		if selfRecovering(input) {
+			return next.Invoke(ctx, input, output)
+		}
 		for attempt := 1; ; attempt++ {
 			err := next.Invoke(ctx, input, output)
 			if err == nil || attempt > f.Attempts {

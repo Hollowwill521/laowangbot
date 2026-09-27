@@ -74,9 +74,11 @@ type App struct {
 	client *telegram.Client
 	gaps   *updates.Manager
 	peers  *bot.PeerCache
-	state  *tgstate.State
-	lock   *os.File
-	bot    atomic.Pointer[bot.Client]
+	// seen 让同一条消息只处理一次：它会从 liveHandler 和更新引擎各来一遍。
+	seen  seenMessages
+	state *tgstate.State
+	lock  *os.File
+	bot   atomic.Pointer[bot.Client]
 	// options 留着是为了让 Run 能拿到 AfterReady。
 	options    Options
 	hookResult atomic.Pointer[error]
@@ -177,6 +179,9 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 			logger.Warn("updates.channel_too_long", slog.Int64("channel", channelID))
 		},
 		OnTooLong: func() { logger.Warn("updates.too_long") },
+		// 启动时更新引擎要给每个群组（这个账号两百多个）各补抓一次，不设上限就是同时发出
+		// 两百多个 getChannelDifference，其中几十个会被限流 3–4 秒。
+		MaxChannelDifferenceConcurrency: 4,
 	}
 	if state != nil {
 		gapsConfig.Storage = state
@@ -189,7 +194,7 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 		SessionStorage: storage,
 		Device:         telegram.DeviceConfig{DeviceModel: cfg.DeviceModel},
 		Logger:         protocol,
-		UpdateHandler:  app.gaps,
+		UpdateHandler:  liveHandler{live: app.liveDispatcher(), next: app.gaps},
 		// 补上 MiBox 所用的 teleproto 对每个请求都做、gotd 不做的事：60 秒以内的限流和
 		// 服务端内部错误自动重试（最多 5 次），每个应答里的用户和群都记进缓存。
 		// 从 MiBox 移植来的命令都默认有这层保护。发出去的消息里的 IP 按 .privacy 的设置打码，
@@ -301,6 +306,20 @@ func messageChat(message tg.MessageClass) string {
 	return bot.PeerID(plain.PeerID)
 }
 
+// liveDispatcher 只管新消息，给 liveHandler 在更新引擎之前派发用。
+func (a *App) liveDispatcher() tg.UpdateDispatcher {
+	dispatcher := tg.NewUpdateDispatcher()
+	dispatcher.OnNewMessage(func(ctx context.Context, entities tg.Entities, update *tg.UpdateNewMessage) error {
+		a.handle(ctx, entities, update.Message, false)
+		return nil
+	})
+	dispatcher.OnNewChannelMessage(func(ctx context.Context, entities tg.Entities, update *tg.UpdateNewChannelMessage) error {
+		a.handle(ctx, entities, update.Message, false)
+		return nil
+	})
+	return dispatcher
+}
+
 func (a *App) dispatcher() tg.UpdateDispatcher {
 	dispatcher := tg.NewUpdateDispatcher()
 	dispatcher.OnNewMessage(func(ctx context.Context, entities tg.Entities, update *tg.UpdateNewMessage) error {
@@ -339,6 +358,9 @@ func (a *App) handle(ctx context.Context, entities tg.Entities, message tg.Messa
 	if client == nil {
 		return
 	}
+	if !edited && !a.seen.first(messageKey(bot.PeerID(plain.PeerID), plain.ID), time.Now()) {
+		return
+	}
 	// 能不能解析成命令，决定了丢弃时记录的级别：普通消息经过只是
 	// debug 噪音；操作者输入了命令却没等到回应，就该记在他们真正会看的
 	// 级别上。
@@ -363,6 +385,9 @@ func (a *App) handle(ctx context.Context, entities tg.Entities, message tg.Messa
 	switch {
 	case edited:
 		drop("edited")
+		return
+	case sentBeforeStart(plain.Date, a.Started):
+		drop("sent before this process started")
 		return
 	case !converted:
 		drop("unaddressable peer")
@@ -490,7 +515,7 @@ func (a *App) Run(ctx context.Context) error {
 				stop()
 			}()
 			err = a.gaps.Run(serving, a.client.API(), self.ID, updates.AuthOptions{IsBot: self.Bot})
-			a.Registry.Wait(10 * time.Second)
+			a.stopCommands()
 			if result := a.hookResult.Load(); result != nil {
 				return *result
 			}
@@ -500,7 +525,17 @@ func (a *App) Run(ctx context.Context) error {
 			return err
 		}
 		err = a.gaps.Run(ctx, a.client.API(), self.ID, updates.AuthOptions{IsBot: self.Bot})
-		a.Registry.Wait(10 * time.Second)
+		a.stopCommands()
 		return err
 	})
+}
+
+// stopCommands 在退出前掐断所有还在跑的命令，只等它们收尾一小会儿（子进程随之被杀掉），
+// 不等跑完：重启常常就是为了掐断卡住的命令。以前这里最多等 10 秒，卡住的命令会把每次重启
+// 都拖满 10 秒。
+func (a *App) stopCommands() {
+	a.Registry.Abort()
+	if !a.Registry.Wait(2 * time.Second) {
+		a.Logger.Warn("shutdown.commands_lingering")
+	}
 }

@@ -60,6 +60,14 @@ func TestRetrier(t *testing.T) {
 	if err := waiter.Handle(fake)(context.Background(), &tg.MessagesGetMessagesRequest{}, nil); err == nil || fake.calls != 1 {
 		t.Errorf("普通错误不该重试：err=%v 调用 %d 次", err, fake.calls)
 	}
+	// 更新引擎补抓群组更新的请求失败了就原样交回：它自己会再补，这里一等就卡住那个群组。
+	for _, fake := range []*flaky{{failures: 1, seconds: 3}, {failures: 1, seconds: -1}} {
+		slept := time.Duration(0)
+		waiter := Retrier{MaxWait: 30 * time.Second, Attempts: 3, sleep: func(_ context.Context, d time.Duration) error { slept += d; return nil }}
+		if err := waiter.Handle(fake)(context.Background(), &tg.UpdatesGetChannelDifferenceRequest{}, nil); err == nil || fake.calls != 1 || slept != 0 {
+			t.Errorf("getChannelDifference 不该重试：err=%v 调用 %d 次 等了 %v", err, fake.calls, slept)
+		}
+	}
 	if got := methodName(&tg.ChannelsGetMessagesRequest{}); got != "channels.getMessages" {
 		t.Errorf("methodName = %q", got)
 	}
