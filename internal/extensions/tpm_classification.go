@@ -30,3 +30,13 @@ func (m managedTPM) UpdateRemoteForce(ctx context.Context, name string, force bo
 	}
 	return fmt.Errorf("插件 %s 未安装；可使用 tpm search 查询", name)
 }
+
+func (m managedTPM) Batch(ctx context.Context, apply func(tpmManager) (bool, error)) error {
+	if batch, ok := m.tpmManager.(tpmBatcher); ok {
+		return batch.Batch(ctx, func(stage tpmManager) (bool, error) {
+			return apply(managedTPM{stage, m.registry})
+		})
+	}
+	_, err := apply(m)
+	return err
+}

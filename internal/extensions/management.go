@@ -28,16 +28,11 @@ func registerManagement(a *app.App, m plugin.Manager) {
 		if err != nil {
 			return err
 		}
-		builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Source: a.Env.Get("LAOWANGBOT_SOURCE", ""), Repo: a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")}
+		progress := newTPMProgress(ctx, inv.EditText)
+		defer progress.Stop()
+		builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Source: a.Env.Get("LAOWANGBOT_SOURCE", ""), Repo: a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Progress: progress.Stage}
 		compiledManager := &sourceManager{Manager: m, ctx: ctx, apply: builder.Apply}
-		var last time.Time
-		r, e := executeTPM(ctx, managedTPM{compiledManager, a.Registry}, inv.Args, func(text string) error {
-			if time.Since(last) < time.Second {
-				return nil
-			}
-			last = time.Now()
-			return inv.EditText(ctx, text)
-		})
+		r, e := executeTPM(ctx, managedTPM{compiledManager, a.Registry}, inv.Args, progress.Item)
 		if e != nil {
 			return e
 		}
@@ -59,6 +54,7 @@ func registerManagement(a *app.App, m plugin.Manager) {
 			}
 			r.Text = "手动 Go 源码插件 " + name + " 已编译进主程序。"
 		}
+		progress.Stop()
 		if r.File != nil {
 			peer, e := inv.Client.InputPeer(inv.Message.Peer)
 			if e != nil {

@@ -20,7 +20,18 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
 )
 
-type Builder struct{ Root, Binary, Source, Version, Repo string }
+type Builder struct {
+	Root, Binary, Source, Version, Repo string
+	// Progress reports stages synchronously; callers should not block on network I/O.
+	Progress func(string)
+}
+
+func (b Builder) report(stage string) {
+	if b.Progress != nil {
+		b.Progress(stage)
+	}
+}
+
 type metadata struct {
 	Version string `json:"version"`
 }
@@ -75,10 +86,12 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 	if err := b.absolutePaths(); err != nil {
 		return err
 	}
+	b.report("检查 Go 工具链")
 	goBinary, err := findGo()
 	if err != nil {
 		return err
 	}
+	b.report("准备安装事务")
 	lock, err := b.lock()
 	if err != nil {
 		return err
@@ -97,6 +110,7 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 		return err
 	}
 	if mutate != nil {
+		b.report("下载并校验插件源码")
 		if err = mutate(plugin.Manager{Root: stage}); err != nil {
 			return err
 		}
@@ -131,10 +145,12 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 		manifests = append(manifests, m)
 		dirs = append(dirs, dir)
 	}
+	b.report("准备主程序源码")
 	source := filepath.Join(stage, "source")
 	version := b.Version
 	if tag != "" {
 		version = tag
+		b.report("下载主程序源码 " + tag)
 		err = b.clone(ctx, source, tag)
 	} else if data, e := os.ReadFile(filepath.Join(base, "current.json")); e == nil {
 		var m metadata
@@ -153,6 +169,7 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 		if local != "" {
 			err = copyTree(local, source, true)
 		} else {
+			b.report("下载主程序源码 " + version)
 			err = b.clone(ctx, source, version)
 		}
 	}
@@ -182,13 +199,15 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 	if err = os.WriteFile(filepath.Join(source, "cmd/laowangbot/zz_plugins_generated.go"), []byte(generated), 0600); err != nil {
 		return err
 	}
+	b.report("编译主程序（首次需下载依赖；低内存模式）")
 	candidate := filepath.Join(stage, "binary")
-	cmd := exec.CommandContext(ctx, goBinary, "build", "-p", "1", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
+	cmd := exec.CommandContext(ctx, goBinary, "build", "-p", "1", "-v", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
 	cmd.Dir = source
 	cmd.Env = buildEnv()
-	if err = run(cmd); err != nil {
+	if err = runBuild(cmd, b.Progress); err != nil {
 		return err
 	}
+	b.report("校验新程序与插件")
 	check := exec.CommandContext(ctx, candidate, "--check-plugins")
 	check.Dir = stage
 	if err = run(check); err != nil {
@@ -211,6 +230,7 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 	if err = os.WriteFile(filepath.Join(stage, "current.json"), data, 0600); err != nil {
 		return err
 	}
+	b.report("保存并切换新程序")
 	return b.commit(stage)
 }
 func buildEnv() []string {

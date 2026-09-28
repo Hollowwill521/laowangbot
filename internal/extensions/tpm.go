@@ -21,6 +21,10 @@ type tpmManager interface {
 	Export(string) ([]byte, error)
 	ImportPackage([]byte, bool) (string, error)
 }
+type tpmBatcher interface {
+	Batch(context.Context, func(tpmManager) (bool, error)) error
+}
+
 type tpmResult struct {
 	Text        string
 	File        []byte
@@ -29,7 +33,7 @@ type tpmResult struct {
 }
 
 func tpmHelp(prefix string) string {
-	return "📦 laowangbot 插件管理器\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件\n" + prefix + "tpm ls/list [-v] 或 lv：已安装插件及来源\n" + prefix + "tpm i/install 名称…|all：下载源码并编译进主程序\n" + prefix + "tpm i：回复 Go 源码 ZIP 包编译安装\n" + prefix + "tpm update/ua [名称…] [-f]：更新远程插件，省略名称更新全部\n" + prefix + "tpm rm/remove/uninstall/un 名称…|all：卸载代码，保留数据\n" + prefix + "tpm upload/ul 名称：导出 ZIP 插件包（不含状态）\n" + prefix + "tpm local 路径 / replace 路径：手动安装 / 替换\n\n远程源固定为当前项目；手动插件不参与远程更新。修改过的远程插件默认跳过，-f 才覆盖。安装、更新、卸载都会重新编译主程序，成功后自动重启（无重启组件时请手动重启）。需 Go（版本满足主项目 go.mod）、Git 与依赖下载网络；首次编译较慢。首次可通过 LAOWANGBOT_SOURCE 指定本地项目源码；否则获取当前版本标签源码。\n主程序更新：使用 " + prefix + "update check 检查，再用 " + prefix + "update run 获取新版源码，保留当前插件源码一起编译；失败保留旧程序。手动插件更新用 tpm replace 路径。仅接受 protocol_version=2 的 Go 源码包，旧可执行文件/TS 包必须迁移。Windows 暂不支持源码自编译替换，需外部构建后停止服务手动替换。"
+	return "📦 laowangbot 插件管理器\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件\n" + prefix + "tpm ls/list [-v] 或 lv：已安装插件及来源\n" + prefix + "tpm i/install 名称…|all：下载源码并编译进主程序\n" + prefix + "tpm i：回复 Go 源码 ZIP 包编译安装\n" + prefix + "tpm update/ua [名称…] [-f]：更新远程插件，省略名称更新全部\n" + prefix + "tpm rm/remove/uninstall/un 名称…|all：卸载代码，保留数据\n" + prefix + "tpm upload/ul 名称：导出 ZIP 插件包（不含状态）\n" + prefix + "tpm local 路径 / replace 路径：手动安装 / 替换\n\n远程源固定为当前项目；手动插件不参与远程更新。修改过的远程插件默认跳过，-f 才覆盖。安装、更新、卸载都会重新编译主程序；批量安装先准备源码，再统一编译一次，编译失败整批不生效。进度显示阶段、耗时与当前编译包，成功后自动重启（无重启组件时请手动重启）。需 Go（版本满足主项目 go.mod）、Git 与依赖下载网络；首次编译较慢。首次可通过 LAOWANGBOT_SOURCE 指定本地项目源码；否则获取当前版本标签源码。\n主程序更新：使用 " + prefix + "update check 检查，再用 " + prefix + "update run 获取新版源码，保留当前插件源码一起编译；失败保留旧程序。手动插件更新用 tpm replace 路径。仅接受 protocol_version=2 的 Go 源码包，旧可执行文件/TS 包必须迁移。Windows 暂不支持源码自编译替换，需外部构建后停止服务手动替换。"
 }
 func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(string) error) (tpmResult, error) {
 	if len(args) == 0 {
@@ -159,6 +163,11 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 	if all {
 		names = nil
 		if action == "install" {
+			if progress != nil {
+				if err := progress("获取远程插件列表…"); err != nil {
+					return tpmResult{}, err
+				}
+			}
 			items, e := m.Search(ctx, "")
 			if e != nil {
 				return tpmResult{}, e
@@ -195,35 +204,68 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 		}
 	}
 	success, failed := 0, 0
-	for i, name := range names {
-		if e := ctx.Err(); e != nil {
-			return tpmResult{}, e
-		}
-		if progress != nil {
-			if e := progress(fmt.Sprintf("%s：%d/%d · %s", action, i+1, len(names), name)); e != nil {
-				return tpmResult{}, e
+	successRows := []int{}
+	batch, supportsBatch := m.(tpmBatcher)
+	useBatch := action == "install" && supportsBatch && len(names) > 1
+	actionLabel := map[string]string{"install": "下载插件", "update": "更新插件源码", "remove": "移除插件源码"}[action]
+	apply := func(m tpmManager) (bool, error) {
+		for i, name := range names {
+			if e := ctx.Err(); e != nil {
+				return false, e
+			}
+			if progress != nil {
+				if e := progress(fmt.Sprintf("%s：%d/%d · %s", actionLabel, i+1, len(names), name)); e != nil {
+					return false, e
+				}
+			}
+			var e error
+			switch action {
+			case "install":
+				e = m.InstallRemote(ctx, name)
+			case "update":
+				e = m.UpdateRemoteForce(ctx, name, force)
+			case "remove":
+				e = m.Remove(name)
+			}
+			if e == nil {
+				success++
+				successRows = append(successRows, len(rows))
+				rows = append(rows, "✅ "+name)
+			} else if errors.Is(e, plugin.ErrModified) {
+				skipped++
+				rows = append(rows, "⏭ "+name+"：本地修改，使用 update -f 显式覆盖")
+			} else {
+				failed++
+				rows = append(rows, "❌ "+name+"："+e.Error())
 			}
 		}
-		var e error
-		switch action {
-		case "install":
-			e = m.InstallRemote(ctx, name)
-		case "update":
-			e = m.UpdateRemoteForce(ctx, name, force)
-		case "remove":
-			e = m.Remove(name)
+		if err := ctx.Err(); err != nil {
+			return false, err
 		}
-		if e == nil {
-			success++
-			rows = append(rows, "✅ "+name)
-		} else if errors.Is(e, plugin.ErrModified) {
-			skipped++
-			rows = append(rows, "⏭ "+name+"：本地修改，使用 update -f 显式覆盖")
-		} else {
-			failed++
-			rows = append(rows, "❌ "+name+"："+e.Error())
+		if useBatch && success > 0 && progress != nil {
+			if err := progress(fmt.Sprintf("插件准备完成：%d 项，正在统一编译…", success)); err != nil {
+				return false, err
+			}
 		}
+		return success > 0, nil
 	}
+	if useBatch {
+		if err := batch.Batch(ctx, apply); err != nil {
+			for _, index := range successRows {
+				rows[index] = strings.Replace(rows[index], "✅ ", "❌ ", 1) + "：本批次未生效"
+			}
+			failed += success
+			// Preflight can fail before any item is attempted.
+			if success == 0 && failed == 0 {
+				failed = len(names)
+			}
+			success = 0
+			rows = append(rows, "统一编译或安装失败："+err.Error())
+		}
+	} else if _, err := apply(m); err != nil {
+		return tpmResult{}, err
+	}
+
 	title := fmt.Sprintf("TPM %s：成功 %d · 跳过 %d · 失败 %d", action, success, skipped, failed)
 	footer := "已完成成功项的编译安装；重启后生效，手动插件源码会随主程序更新保留"
 	if action == "remove" {

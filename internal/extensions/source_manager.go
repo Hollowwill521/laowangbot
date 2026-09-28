@@ -2,6 +2,7 @@ package extensions
 
 import (
 	"context"
+	"errors"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
 )
 
@@ -49,4 +50,28 @@ func (m *sourceManager) Installed() ([]plugin.InstalledInfo, error) {
 		}
 	}
 	return items, err
+}
+
+// Batch mutates one private deployment, then asks the builder to compile once.
+// Empty batches abort before source preparation or compilation.
+var errEmptyBatch = errors.New("no plugin changes")
+
+func (m *sourceManager) Batch(ctx context.Context, apply func(tpmManager) (bool, error)) error {
+	err := m.apply(ctx, func(stage plugin.Manager) error {
+		changed, err := apply(stage)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return errEmptyBatch
+		}
+		return nil
+	})
+	if errors.Is(err, errEmptyBatch) {
+		return nil
+	}
+	if err == nil {
+		m.changed = true
+	}
+	return err
 }
