@@ -60,7 +60,7 @@ func TestBuiltCLIMigrationBackupAndPlugins(t *testing.T) {
 	os.WriteFile(filepath.Join(old, "data/alias.json"), []byte(`{"aliases":{"p":"ping"}}`), 0600)
 	if runtime.GOOS != "windows" {
 		wizardRoot := filepath.Join(root, "wizard")
-		cmd := exec.Command("bash", filepath.Join(repo, "scripts/install.sh"), "--wizard", "--no-service", "--binary", binary, "--root", wizardRoot)
+		cmd := exec.Command("bash", filepath.Join(repo, "scripts/install.sh"), "--wizard", "--source-stopped", "--no-service", "--binary", binary, "--root", wizardRoot)
 		cmd.Stdin = strings.NewReader("1\n" + old + "\n2\n1\n")
 		if b, e := cmd.CombinedOutput(); e != nil {
 			t.Fatalf("migration wizard: %v\n%s", e, b)

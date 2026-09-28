@@ -14,15 +14,16 @@ warn() { ui "$C_WARN" "$*"; }
 error() { ui "$C_ERROR" "$*"; }
 die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
-BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0
+BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0; SOURCE_ALREADY_STOPPED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --root|--repo|--version|--binary|--migrate|--from|--restore)
       [ $# -ge 2 ] || { error "Missing value for $1"; exit 2; }
       case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; esac; shift 2;;
     --wizard) WIZARD=1; shift;;
+    --source-stopped) SOURCE_ALREADY_STOPPED=1; shift;;
     --no-service) SERVICE=0; shift;;
-    --help|-h) info 'Usage: install.sh [--wizard] [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
+    --help|-h) info 'Usage: install.sh [--wizard] [--source-stopped] [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
     *) error "Unknown argument: $1"; exit 2;;
   esac
 done
@@ -72,34 +73,75 @@ if [ -n "$MIGRATE" ]; then
   case "$ROOT/" in "$MIGRATE/"*) die '目标目录必须位于旧部署目录之外';; esac
   if [ -d "$ROOT" ] && [ -n "$(ls -A "$ROOT")" ]; then die 'Migration destination must be empty'; fi
 fi
+valid_source_unit() {
+  [[ "$1" =~ ^[A-Za-z0-9_@][A-Za-z0-9_.@-]*$ ]] || return 1
+  case "$1" in laowangbot|laowangbot.service|*@.service) return 1;; esac
+}
+source_matches() {
+  local working
+  working=$(systemctl show "$1" -p WorkingDirectory --value 2>/dev/null) || return 1
+  [ -d "$working" ] && [ "$(cd -- "$working" && pwd -P)" = "$MIGRATE" ]
+}
+select_source_service() {
+  local loaded installed unit rest canonical found candidate choice index
+  local matches=()
+  info '正在自动识别旧 systemd 服务…'
+  loaded=$(systemctl list-units --type=service --all --plain --no-legend --no-pager 2>/dev/null) || die '无法读取 systemd 服务列表，未停止任何服务'
+  installed=$(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null) || die '无法读取 systemd 服务文件列表，未停止任何服务'
+  while read -r unit rest; do
+    [ -n "$unit" ] || continue
+    valid_source_unit "$unit" || continue
+    source_matches "$unit" || continue
+    canonical=$(systemctl show "$unit" -p Id --value 2>/dev/null) || continue
+    valid_source_unit "$canonical" || continue
+    # Aliases can appear in both listings; stop the canonical unit only once.
+    found=0
+    for candidate in "${matches[@]+"${matches[@]}"}"; do [ "$candidate" != "$canonical" ] || found=1; done
+    [ "$found" = 1 ] || matches+=("$canonical")
+  done <<< "$loaded
+$installed"
+  case "${#matches[@]}" in
+    0)
+      warn "未找到工作目录为 $MIGRATE 的服务，请输入旧服务名。"
+      case "$FROM" in mibot-lite) candidate=mibot-lite.service;; mibox) candidate=mibot.service;; telebox) candidate=telebox.service;; *) candidate=;; esac
+      ask "旧 systemd 服务名称${candidate:+ [$candidate]}："
+      SOURCE_SERVICE=${ANSWER:-$candidate}
+      ;;
+    1) SOURCE_SERVICE=${matches[0]}; success "自动识别到旧服务：$SOURCE_SERVICE";;
+    *)
+      info '找到多个匹配服务，请选择：'
+      index=1
+      for candidate in "${matches[@]}"; do ui "$C_OK" "$index) $candidate"; index=$((index+1)); done
+      warn '0) 取消'
+      ask '请选择服务序号（回车取消）：'
+      choice=${ANSWER:-0}; SOURCE_SERVICE=
+      index=1
+      for candidate in "${matches[@]}"; do
+        if [ "$choice" = "$index" ]; then SOURCE_SERVICE=$candidate; break; fi
+        index=$((index+1))
+      done
+      [ -n "$SOURCE_SERVICE" ] || die '未选择有效服务，已取消'
+      ;;
+  esac
+  valid_source_unit "$SOURCE_SERVICE" || die '服务名称无效，或不能将新服务作为旧服务'
+  source_matches "$SOURCE_SERVICE" || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
+}
 if [ "$WIZARD" = 1 ]; then
   info "旧目录：$MIGRATE"
   info "新目录：$ROOT"
   warn '旧目录将保留；不支持的插件会归档并列入报告。'
-  info '旧实例停止方式：'
-  ui "$C_OK" '1) 由脚本停止 systemd 服务（默认）'
-  ui "$C_OK" '2) 已自行停止'
-  ask '请选择 [1-2，回车默认 1]：'
-  case "${ANSWER:-1}" in
-    1|systemd)
-      [ "$OS" = linux ] || die '此平台请选 2 并先停止旧实例'
-      command -v systemctl >/dev/null || die '找不到 systemctl'
-      ask '旧 systemd 服务名称（例如 mibot-lite.service）：'
-      SOURCE_SERVICE=$ANSWER
-      [[ "$SOURCE_SERVICE" =~ ^[A-Za-z0-9_@][A-Za-z0-9_.@-]*$ ]] || die '服务名称无效'
-      case "$SOURCE_SERVICE" in laowangbot|laowangbot.service) die '不能把新服务当作旧服务停止';; esac
-      OLD_ROOT=$(systemctl show "$SOURCE_SERVICE" -p WorkingDirectory --value)
-      [ -d "$OLD_ROOT" ] && [ "$(cd -- "$OLD_ROOT" && pwd -P)" = "$MIGRATE" ] || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
-      ;;
-    2|manual)
-      warn '请确认旧人形已停止（包括 Docker/PM2/后台进程）。'
-      ui "$C_OK" '1) 已停止，继续迁移'
-      warn '0) 取消'
-      ask '请选择 [0-1，回车默认 0]：'
-      case "${ANSWER:-0}" in 1|y|Y) ;; *) die '已取消，请先停止旧实例';; esac
-      ;;
-    *) die '停止方式无效，已取消';;
-  esac
+  if [ "$SOURCE_ALREADY_STOPPED" = 1 ]; then
+    warn '按 --source-stopped 跳过服务识别；旧实例必须已停止。'
+  elif [ "$OS" = linux ]; then
+    command -v systemctl >/dev/null || die '找不到 systemctl；请停止旧实例后加 --source-stopped 重试'
+    select_source_service
+  else
+    warn '请确认旧人形已停止（包括 Docker/PM2/后台进程）。'
+    ui "$C_OK" '1) 已停止，继续迁移'
+    warn '0) 取消'
+    ask '请选择 [0-1，回车默认 0]：'
+    case "${ANSWER:-0}" in 1|y|Y) ;; *) die '已取消，请先停止旧实例';; esac
+  fi
 fi
 WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0; TARGET_START_ATTEMPTED=0
 UNIT=/etc/systemd/system/laowangbot.service
@@ -143,6 +185,7 @@ if [ "$SERVICE" = 1 ] && [ -f "$UNIT" ]; then
   cp "$UNIT" "$WORK/unit"; HAD_UNIT=1
 fi
 if [ -n "$SOURCE_SERVICE" ]; then
+  source_matches "$SOURCE_SERVICE" || die '旧服务工作目录已变化，未停止服务'
   OLD_STATE=$(systemctl show "$SOURCE_SERVICE" -p ActiveState --value) || die '无法查询旧服务状态，拒绝迁移'
   case "$OLD_STATE" in
     active|activating|reloading|deactivating) SOURCE_STOPPED=1;;
@@ -211,5 +254,5 @@ warn "本地配置检查通过；请在 Telegram 执行 .ping 确认连接。"
 if [ -n "$MIGRATE" ]; then
   success "迁移完成。旧部署保留在：$MIGRATE"
   info "迁移报告：$ROOT/migration-report.json"
-  if [ -n "$SOURCE_SERVICE" ]; then warn "旧服务保持停止：$SOURCE_SERVICE；旧服务自启动设置未更改，请避免重启服务器后双实例运行。"; fi
+  if [ -n "$SOURCE_SERVICE" ]; then warn "旧服务保持停止：${SOURCE_SERVICE}；旧服务自启动设置未更改，请避免重启服务器后双实例运行。"; fi
 fi
