@@ -70,7 +70,7 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 ./laowangbot --plugin list --root /path/to/new-laowangbot
 ```
 
-Telegram 对应 `.tpm local 路径`、`.tpm replace 路径`、`.tpm list`。安装/替换后重启加载；显式本地替换将插件改为手工维护。远程 `.tpm install 名称` / `.tpm update 名称` 仅读取 `OrionG-hub/laowangbot` 的 `master` 分支目录。仓库提供 `echo` 示例（命令 `plugin_hello`），该 Shell 示例仅适用于 Unix，可用 `.tpm install echo` 安装。
+Telegram 对应 `.tpm local 路径`、`.tpm replace 路径`、`.tpm list`。安装/替换后重启加载；显式本地替换将插件改为手工维护。远程 `.tpm install 名称` / `.tpm update 名称` 仅读取 `OrionG-hub/laowangbot` 的 `master` 分支目录。当前远程目录提供 `monitor` 和 `qdsg`。
 
 ## 兼容依据与回退
 

@@ -2,11 +2,7 @@
 
 插件以 Go 源码分发，安装时编译进 laowangbot。运行不需要 Go；安装、更新和卸载需要与宿主 `go.mod` 匹配的 Go 工具链、Git 及构建依赖的网络访问。依赖版本由宿主固定，插件包不能自带 `go.mod`、`go.work` 或依赖锁文件。
 
-每个包根目录包含 `manifest.json` 和一个 Go 包；资源使用 `go:embed`。示例见 `examples/plugins/echo`：
-
-```json
-{"name":"echo","version":"2.0.0","protocol_version":2,"package":".","commands":["plugin_hello"],"timeout_seconds":5}
-```
+每个包根目录包含 `manifest.json` 和一个 Go 包；资源使用 `go:embed`。实现可参考 `plugins/monitor` 和 `plugins/qdsg`。
 
 不再支持 `executable`、`args`、`persistent`。根包导出：
 

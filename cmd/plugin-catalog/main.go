@@ -57,7 +57,7 @@ func generate(root, tag string) (catalog, error) {
 	if !regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:[-.a-zA-Z0-9]*)?$`).MatchString(tag) {
 		return c, fmt.Errorf("invalid release tag: %q", tag)
 	}
-	dirs := []string{"examples/plugins/echo"}
+	var dirs []string
 	children, err := os.ReadDir(filepath.Join(root, "plugins"))
 	if err != nil {
 		return c, err

@@ -2,30 +2,6 @@
   "plugins": [
     {
       "manifest": {
-        "name": "echo",
-        "version": "2.0.0",
-        "protocol_version": 2,
-        "package": ".",
-        "commands": [
-          "plugin_hello"
-        ],
-        "timeout_seconds": 5
-      },
-      "files": [
-        {
-          "path": "echo.go",
-          "url": "https://raw.githubusercontent.com/OrionG-hub/laowangbot/v0.1.2/examples/plugins/echo/echo.go",
-          "sha256": "f568035e48fe1685098e2bc7d050114ceea9343e226126c8df19c50e8883bee4"
-        },
-        {
-          "path": "greeting.txt",
-          "url": "https://raw.githubusercontent.com/OrionG-hub/laowangbot/v0.1.2/examples/plugins/echo/greeting.txt",
-          "sha256": "a2242d97de0ecfdc1e4e2eb5ef6e4da5f8c41d32bfd9b271766e3357a904d327"
-        }
-      ]
-    },
-    {
-      "manifest": {
         "name": "monitor",
         "description": "关键词、指定人监控转发与 Bot 集群同步（Go 源码插件）",
         "version": "1.0.0",
