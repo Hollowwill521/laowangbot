@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/app"
 )
 
 // ddw 和 jbff 的帧是 JPEG，其余是 PNG，两种都得能当画布。

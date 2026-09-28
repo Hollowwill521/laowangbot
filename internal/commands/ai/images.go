@@ -10,10 +10,10 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/imaging"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/imaging"
 )
 
 // 提问时带上的图片：回复的那条和命令消息本身里的照片、图片文件、贴纸和动图

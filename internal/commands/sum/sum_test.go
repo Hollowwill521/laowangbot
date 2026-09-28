@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // TestSumCronParsing 检查五字段和六字段（带秒）的 Cron 都能解析，时间点正确。

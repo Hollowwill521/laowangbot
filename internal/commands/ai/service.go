@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // ChatRequest 是其他命令借 ai 的统一配置生成文字的一次请求，对应 MiBox ai 插件的

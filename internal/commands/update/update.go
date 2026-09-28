@@ -14,14 +14,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/commands/restart"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
 )
 
-// 从 GitHub Releases 自更新：release 里必须有名为 mibot-lite-<os>-<arch>
+// 从 GitHub Releases 自更新：release 里必须有名为 laowangbot-<os>-<arch>
 // 的文件，以及每行都是 "<sha256>  <name>" 的 checksums.txt。下载的文件
 // 通过校验、新二进制也证明了自己能读取这个部署（--check）之前，
 // 磁盘上什么都不改。
@@ -38,7 +38,7 @@ type release struct {
 
 // Register 注册 .update。
 func Register(a *app.App) {
-	repo := a.Env.Get("MIBOT_UPDATE_REPO", "MiCat-S/mibot-lite")
+	repo := a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
 	a.Registry.Register(&command.Command{Name: "update", Description: "检查并更新程序", Usage: "[check|run|rollback]", Timeout: 10 * time.Minute,
 		Help: func(prefix string) string {
 			return "<b>程序更新</b>\n" + command.Code(prefix+"update") + " 当前版本与回滚状态\n" + command.Code(prefix+"update check") + " 读取 GitHub Releases 检查新版本\n" +
@@ -67,7 +67,7 @@ func Register(a *app.App) {
 				}
 				return inv.Edit(ctx, strings.Join(rows, "\n"))
 			case "check":
-				if err := inv.Edit(ctx, "<b>MiBot Lite 更新</b>\n正在读取发布信息…"); err != nil {
+				if err := inv.Edit(ctx, "<b>laowangbot 更新</b>\n正在读取发布信息…"); err != nil {
 					return err
 				}
 				latest, err := fetchRelease(ctx, repo)
@@ -87,8 +87,14 @@ func Register(a *app.App) {
 				}
 				return inv.Edit(ctx, text)
 			case "run", "apply":
+				if runtime.GOOS == "windows" {
+					return inv.EditText(ctx, "Windows 请停止 laowangbot 后重跑 install.ps1 更新；运行中的 exe 无法安全替换。")
+				}
 				return runUpdate(ctx, a, inv, repo, binary)
 			case "rollback":
+				if runtime.GOOS == "windows" {
+					return inv.EditText(ctx, "Windows 请停止 laowangbot 后使用 install.ps1 -Rollback 回滚。")
+				}
 				previous := binary + ".previous"
 				if info, err := os.Stat(previous); err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 					return inv.EditText(ctx, "暂无可回滚的上一版本")
@@ -105,7 +111,7 @@ func Register(a *app.App) {
 					return err
 				}
 				_ = os.Rename(swap, previous)
-				return restart.Now(ctx, inv, "rollback", "<b>MiBot Lite 回滚</b>\n已换回上一版本，正在重启…", "回滚后重启失败。")
+				return restart.Now(ctx, inv, "rollback", "<b>laowangbot 回滚</b>\n已换回上一版本，正在重启…", "回滚后重启失败。")
 			}
 			return inv.EditText(ctx, "用法："+inv.Prefix+"update [check|run|rollback]")
 		}})
@@ -149,7 +155,7 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 	if !restart.Available() {
 		return inv.EditText(ctx, "重启组件不可用")
 	}
-	progress := func(text string) error { return inv.Edit(ctx, "<b>MiBot Lite 更新</b>\n"+text) }
+	progress := func(text string) error { return inv.Edit(ctx, "<b>laowangbot 更新</b>\n"+text) }
 	if err := progress("正在读取发布信息…"); err != nil {
 		return err
 	}
@@ -160,7 +166,7 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 	if !newer(a.Version, latest.TagName) {
 		return inv.Edit(ctx, "<b>已是最新版本</b>\n当前："+command.Code(kit.Version(a)))
 	}
-	assetName := "mibot-lite-" + runtime.GOOS + "-" + runtime.GOARCH
+	assetName := "laowangbot-" + runtime.GOOS + "-" + runtime.GOARCH
 	var assetURL, sumsURL string
 	var assetSize int64
 	for _, asset := range latest.Assets {
@@ -232,5 +238,5 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 		_ = os.Rename(previous, binary)
 		return err
 	}
-	return restart.Now(ctx, inv, "update", "<b>MiBot Lite 更新</b>\n已安装 "+command.Code(latest.TagName)+"，正在重启…", "更新后重启失败，可手动重启服务。")
+	return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已安装 "+command.Code(latest.TagName)+"，正在重启…", "更新后重启失败，可手动重启服务。")
 }

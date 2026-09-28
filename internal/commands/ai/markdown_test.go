@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 // TestMarkdownToHTML 覆盖常见的块和行内格式，其余文本必须转义。

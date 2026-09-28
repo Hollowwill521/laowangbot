@@ -1,4 +1,4 @@
-module github.com/MiCat-S/mibot-lite
+module github.com/OrionG-hub/laowangbot
 
 go 1.26.0
 

@@ -18,14 +18,14 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
-	"github.com/MiCat-S/mibot-lite/internal/imaging"
-	"github.com/MiCat-S/mibot-lite/internal/media"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/imaging"
+	"github.com/OrionG-hub/laowangbot/internal/media"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // eatSource 是 .eat 默认的素材目录：一份 JSON，列出每款表情的底图、遮罩和头像位置。

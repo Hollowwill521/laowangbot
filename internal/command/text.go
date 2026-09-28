@@ -3,7 +3,7 @@ package command
 import (
 	"strings"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 // Escape 把不可信的文本转义成能安全放进 HTML 的形式。

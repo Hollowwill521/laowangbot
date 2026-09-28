@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
-	"github.com/MiCat-S/mibot-lite/internal/sysinfo"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/sysinfo"
 )
 
 // Register 注册 ping、version、memory、status、sysinfo 和 help。
@@ -63,7 +63,7 @@ func Register(a *app.App) {
 				"CPU: " + command.Code(fmt.Sprintf("%d 核", machine.CPUs)),
 				"系统内存: " + command.Code(fmt.Sprintf("%.2f / %.2f MB", sysinfo.Megabytes(machine.TotalMemory-machine.FreeMemory), sysinfo.Megabytes(machine.TotalMemory))),
 				"",
-				"<b>MiBot Lite 进程</b>",
+				"<b>laowangbot 进程</b>",
 				"Go: " + command.Code(runtime.Version()),
 				"PID: " + command.Code(fmt.Sprint(os.Getpid())),
 				"RSS: " + command.Code(fmt.Sprintf("%.2f MB", sysinfo.Megabytes(process.RSS))),
@@ -89,8 +89,8 @@ func Register(a *app.App) {
 
 func versionText(a *app.App) string {
 	return strings.Join([]string{
-		"<b>MiBot Lite 版本</b>", "",
-		"MiBot Lite: " + command.Code(kit.Version(a)),
+		"<b>laowangbot 版本</b>", "",
+		"laowangbot: " + command.Code(kit.Version(a)),
 		"Go: " + command.Code(runtime.Version()),
 		"平台: " + command.Code(runtime.GOOS+" "+runtime.GOARCH),
 		"PID: " + command.Code(fmt.Sprint(os.Getpid())),

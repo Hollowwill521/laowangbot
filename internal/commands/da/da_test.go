@@ -12,7 +12,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 // permissionFake 是只回答两个权限接口的假 Telegram：查自己的成员身份按 participantErr

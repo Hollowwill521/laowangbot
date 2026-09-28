@@ -16,11 +16,11 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // settings 存在 data/sticker.json，字段名照 MiBox，--import-mibox 原样搬过来就能用。

@@ -19,14 +19,14 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
-	"github.com/MiCat-S/mibot-lite/internal/imaging"
-	"github.com/MiCat-S/mibot-lite/internal/media"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/imaging"
+	"github.com/OrionG-hub/laowangbot/internal/media"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // 语录图片本身由远程服务渲染：本命令只负责收集谁说了什么、用的哪个头像、

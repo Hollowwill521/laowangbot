@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 )
 
 const maxExpressionLength = 120

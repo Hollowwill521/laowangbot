@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	gotdsession "github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
@@ -22,15 +21,15 @@ import (
 	"github.com/gotd/td/tg"
 	"golang.org/x/term"
 
-	"github.com/MiCat-S/mibot-lite/internal/config"
-	"github.com/MiCat-S/mibot-lite/internal/session"
+	"github.com/OrionG-hub/laowangbot/internal/config"
+	"github.com/OrionG-hub/laowangbot/internal/platform"
+	"github.com/OrionG-hub/laowangbot/internal/session"
 )
 
 // SessionFile 是 gotd 会话文件的文件名，与 MiBox 的 Go 宿主共用。
 const SessionFile = "gotd-session.json"
 
 // lockFile 是运行中的服务持有的实例锁，名字与 internal/app 保持一致。
-const lockFile = "mibot-lite.lock"
 
 // Options 是一次登录的配置。
 type Options struct {
@@ -176,20 +175,11 @@ func Run(ctx context.Context, options Options) error {
 // 根据 pid 文件或服务单元名去猜：不管部署是跑在 systemd 下、终端里，
 // 还是根本没在跑，结果都是对的。
 func refuseWhileRunning(root string) error {
-	path := filepath.Join(root, lockFile)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := platform.LockRoot(root)
 	if err != nil {
-		// 锁文件连打开都打不开，并不能说明有东西在运行；如果目录
-		// 不可用，登录后面自然会因为别的原因失败。
-		return nil
+		return err
 	}
-	defer file.Close()
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return errors.New("a mibot-lite instance is running on this directory; stop it before signing in again")
-	}
-	// 马上释放：登录不需要一直拿着锁，只需要知道有没有别人拿着。
-	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-	return nil
+	return f.Close()
 }
 
 func writeFile(path string, content []byte) error {

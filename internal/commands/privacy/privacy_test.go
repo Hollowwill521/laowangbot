@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 func TestDescribe(t *testing.T) {

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // 服务器的公网地址会和测速结果一起发进聊天，所以要打码，不能原样公开。
@@ -279,5 +279,17 @@ func TestSpeedtestHelpDocumentsEverySubcommand(t *testing.T) {
 	}
 	if pinned := speedtestHelp(t.TempDir(), ".", 48463); !strings.Contains(pinned, "48463") {
 		t.Error("the help does not show the pinned server")
+	}
+}
+
+func TestNonLinuxDoesNotDownloadLinuxCLI(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("non-Linux behavior")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := installOokla(ctx, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "手动安装") {
+		t.Fatalf("want platform guidance before network request, got %v", err)
 	}
 }

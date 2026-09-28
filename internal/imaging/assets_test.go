@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/imaging"
+	"github.com/OrionG-hub/laowangbot/internal/imaging"
 )
 
 // TestRealAnimationAssets 用插件仓库里的一个真实动画跑一遍 .eatgif 的

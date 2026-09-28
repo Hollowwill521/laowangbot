@@ -23,8 +23,8 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/sysinfo"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/sysinfo"
 )
 
 // Case 是一个命令，以及它的回复必须包含的内容。
@@ -47,7 +47,7 @@ type Case struct {
 // Cases 是默认的用例集：所有不改动任何东西就能给出回复的命令。
 var Cases = []Case{
 	{Command: "ping", Expect: "Pong"},
-	{Command: "version", Expect: "MiBot Lite"},
+	{Command: "version", Expect: "laowangbot"},
 	{Command: "memory", Expect: "RSS"},
 	{Command: "status", Expect: "运行时间", Reply: true},
 	{Command: "sysinfo", Expect: "系统信息"},

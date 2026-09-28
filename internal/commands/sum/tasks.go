@@ -14,9 +14,9 @@ import (
 	"github.com/gotd/td/tgerr"
 	"github.com/robfig/cron/v3"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // sumCronParser 同时接受五字段（分 时 日 月 周）和六字段（秒 分 时 日 月 周）的

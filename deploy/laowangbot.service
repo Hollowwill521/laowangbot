@@ -1,0 +1,43 @@
+# Installed as /etc/systemd/system/laowangbot.service by
+# scripts/install-service.sh. Placeholders are substituted by that script.
+[Unit]
+Description=laowangbot
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+ExecStart=@BINARY@ --supervise --root @ROOT@
+
+# Plugins may use optional language runtimes; do not prohibit JIT memory.
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=@ROOT@
+# The deployment directory holds config.json (the Telegram session) and the
+# command data, which includes API keys. Nothing here is world-readable.
+UMask=0077
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+# Includes transient ffmpeg and plugin processes. Adjust for your workload.
+MemoryMax=512M
+
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=laowangbot
+
+[Install]
+WantedBy=multi-user.target

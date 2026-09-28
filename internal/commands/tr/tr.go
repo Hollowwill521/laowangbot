@@ -11,11 +11,11 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // 翻译走的是 Chrome 自带翻译扩展所用的接口。它不需要 key，也不需要

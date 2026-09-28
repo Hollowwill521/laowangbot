@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -67,15 +66,6 @@ func cpuTicks() (idle, total uint64, ok bool) {
 		}
 	}
 	return idle, total, true
-}
-
-// processCPU 是本进程至今用掉的 CPU 时间（用户态加内核态）。
-func processCPU() time.Duration {
-	var usage syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil {
-		return 0
-	}
-	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 
 // SampleResources 采样一次资源水位：CPU 要隔 window 读两次才算得出占用，

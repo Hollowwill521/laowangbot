@@ -11,9 +11,9 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 )
 
 // Telegram 不公开账号的注册时间。用户 id 大致是按顺序分配的，所以根据

@@ -15,7 +15,7 @@ import (
 )
 
 // UserAgent 是默认发送的 User-Agent，请求可以自己覆盖。
-const UserAgent = "MiBot-Lite/1"
+const UserAgent = "laowangbot/1"
 
 // ErrTooLarge 表示响应体超过了请求设定的字节上限。
 var ErrTooLarge = errors.New("response body exceeds the size limit")

@@ -1,6 +1,6 @@
 # built binaries
-/mibot-lite
-/mibot-lite-*
+/laowangbot
+/laowangbot-*
 /dist/
 
 # deployment state (never commit an account)
@@ -8,7 +8,7 @@ config.json
 gotd-session.json
 updates.json
 restart-receipt.json
-mibot-lite.lock
+laowangbot.lock
 /data/
 .env
 
@@ -16,3 +16,13 @@ mibot-lite.lock
 *_local_test.go
 /internal/commands/testkit/
 /internal/commands/*/testdata/
+
+# laowangbot private runtime and local reports
+/state/
+/legacy/
+/migration-report.json
+mibot-lite.lock
+coverage.out
+coverage*.html
+.idea/
+.superpowers/

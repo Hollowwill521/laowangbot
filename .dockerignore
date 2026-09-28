@@ -1,0 +1,8 @@
+.git
+runtime
+config.json
+data
+*.session
+*.log
+dist
+coverage*

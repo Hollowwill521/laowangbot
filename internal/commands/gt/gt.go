@@ -6,10 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/ai"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/ai"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 var leadingToken = regexp.MustCompile(`^\S+\s*`)

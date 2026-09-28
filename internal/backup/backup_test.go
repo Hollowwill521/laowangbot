@@ -7,12 +7,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/app"
 )
 
 const account = `{"api_id": 1234567, "api_hash": "abc", "session": "1xyz"}`
@@ -78,7 +79,7 @@ func TestRoundTripKeepsConfigurationAndDropsTheRest(t *testing.T) {
 			t.Errorf("%s changed in the round trip", name)
 		}
 		info, _ := os.Stat(filepath.Join(target, filepath.FromSlash(name)))
-		if info.Mode().Perm() != 0o600 {
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 			t.Errorf("%s restored as %v; it holds keys and must be 0600", name, info.Mode().Perm())
 		}
 	}
@@ -219,5 +220,57 @@ func TestOversizedArchiveIsRefused(t *testing.T) {
 func TestEmptyDeploymentHasNothingToBackUp(t *testing.T) {
 	if _, _, err := Create(t.TempDir(), "0.1.12", time.Now()); err == nil {
 		t.Fatal("an empty directory produced a backup")
+	}
+}
+
+func TestRestoreLegacyManifest(t *testing.T) {
+	root := t.TempDir()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	head := []byte(`{"format":1,"version":"old"}`)
+	for _, v := range []struct {
+		name string
+		body []byte
+	}{{"mibot-lite-backup.json", head}, {"data/alias.json", []byte(`{"aliases":{"p":"ping"}}`)}} {
+		if err := tw.WriteHeader(&tar.Header{Name: v.name, Mode: 0600, Size: int64(len(v.body)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write(v.body)
+	}
+	tw.Close()
+	gz.Close()
+	if _, err := Restore(bytes.NewReader(buf.Bytes()), root, false); err != nil {
+		t.Fatal(err)
+	}
+	if Manifest != "laowangbot-backup.json" {
+		t.Fatal("new backups must use current brand")
+	}
+}
+
+func TestRestoreRejectsLinkedDataDirectoryBeforeWriting(t *testing.T) {
+	target, outside := t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(target, "data")); err != nil {
+		t.Skip(err)
+	}
+	archive := forge(t, map[string]string{"config.json": account, "data/ai.json": `{"key":"fixture"}`}, true, tar.TypeReg)
+	if _, err := Restore(bytes.NewReader(archive), target, false); err == nil {
+		t.Fatal("restored through data symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "ai.json")); !os.IsNotExist(err) {
+		t.Fatal("wrote outside deployment")
+	}
+	if _, err := os.Stat(filepath.Join(target, "config.json")); !os.IsNotExist(err) {
+		t.Fatal("partially restored account")
+	}
+}
+func TestCreateRejectsLinkedDataDirectory(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(outside, "private.json"), []byte(`{"secret":true}`), 0600)
+	if err := os.Symlink(outside, filepath.Join(root, "data")); err != nil {
+		t.Skip(err)
+	}
+	if _, _, err := Create(root, "test", time.Now()); err == nil {
+		t.Fatal("archived outside deployment through symlink")
 	}
 }

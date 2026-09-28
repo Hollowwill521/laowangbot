@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/MiCat-S/mibot-lite/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 )
 
 // 这里把模型回答的 Markdown 转成两种输出：Telegram 的 HTML（聊天消息）和

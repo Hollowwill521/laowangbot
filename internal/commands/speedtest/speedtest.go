@@ -24,12 +24,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // 测速用的是 Ookla 官方的 Speedtest CLI：它会自己挑就近的服务器，认得出
@@ -192,6 +192,9 @@ func externalTool(dataDir string) (string, string) {
 // 放在这里而不是 /usr/local/bin，是因为这个程序不该自作主张去改系统，
 // 而且部署被删掉时，它装过的东西也应该跟着一起消失。
 func installOokla(ctx context.Context, dataDir string) (string, error) {
+	if runtime.GOOS != "linux" {
+		return "", kit.Failf("请手动安装适用于 %s/%s 的 Ookla speedtest 并放入 PATH", runtime.GOOS, runtime.GOARCH)
+	}
 	archive, ok := ooklaArchives[runtime.GOARCH]
 	digest, hasDigest := ooklaDigests[runtime.GOARCH]
 	if !ok || !hasDigest {

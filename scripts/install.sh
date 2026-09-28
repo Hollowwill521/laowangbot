@@ -1,224 +1,116 @@
-#!/bin/bash
-# One-command install for MiBot Lite.
-#
-#   bash <(curl -fsSL https://raw.githubusercontent.com/MiCat-S/mibot-lite/main/scripts/install.sh)
-#
-# Use the process substitution form, not `curl … | bash`: signing in asks
-# for a phone number and a code, and a piped script has no keyboard. The
-# installer opens /dev/tty when it can and says what to run when it cannot.
-#
-# It downloads the released binary for this machine, checks it against the
-# release's own checksums, signs the account in if the directory has no
-# session yet, installs the systemd unit and starts the service. Running it
-# again upgrades the binary in place and leaves the account alone.
+#!/usr/bin/env bash
+# Downloaded installations require a published GitHub release. --binary is an explicit trusted local override.
 set -euo pipefail
 umask 077
-
-REPO=${MIBOT_REPO:-MiCat-S/mibot-lite}
-ROOT=${MIBOT_ROOT:-/root/mibot-lite}
-SERVICE=mibot-lite.service
-UNIT=/etc/systemd/system/$SERVICE
-WITH_SERVICE=1
-
-RESTORE=
-
-# A while loop, not `for argument in "$@"`: shifting inside a for loop does
-# not move it, so `--root DIR` only worked when it came first and DIR was
-# then read again as an argument of its own.
+ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
+BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    --root) ROOT=${2:?--root needs a directory}; shift ;;
-    --root=*) ROOT=${1#*=} ;;
-    --repo=*) REPO=${1#*=} ;;
-    --restore) RESTORE=${2:?--restore needs a backup file}; shift ;;
-    --restore=*) RESTORE=${1#*=} ;;
-    # Everything except the systemd unit: for trying the installer out
-    # without touching a running deployment.
-    --no-service) WITH_SERVICE=0 ;;
-    --help|-h)
-      printf '%s\n' \
-        'Usage: install.sh [--root DIR] [--repo OWNER/NAME] [--restore FILE] [--no-service]' \
-        '' \
-        'Downloads the latest release for this machine, verifies its SHA-256,' \
-        'signs in when needed, and installs the service. Safe to re-run: it' \
-        'upgrades the binary and leaves config.json and data/ untouched.' \
-        '' \
-        '--restore FILE  set the new install up from a backup made with .bf,' \
-        '                instead of signing in. For a fresh directory only.'
-      exit 0 ;;
-    # A mistyped option used to be ignored, which for --restore meant a
-    # fresh sign-in instead of the restore that was asked for.
-    *) printf 'Unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
+    --root|--repo|--version|--binary|--migrate|--from|--restore)
+      [ $# -ge 2 ] || { echo "Missing value for $1" >&2; exit 2; }
+      case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; esac; shift 2;;
+    --no-service) SERVICE=0; shift;;
+    --help|-h) echo 'Usage: install.sh [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
+    *) echo "Unknown argument: $1" >&2; exit 2;;
   esac
-  shift
 done
-
-say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
-die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
-
-[ "$(uname -s)" = Linux ] || die "this installer targets Linux; build from source for $(uname -s)"
-[ "${EUID:-$(id -u)}" = 0 ] || die "run as root (the service and its unit are installed system-wide)"
-for tool in curl install systemctl; do
-  command -v "$tool" > /dev/null || die "missing required command: $tool"
-done
-command -v sha256sum > /dev/null || command -v shasum > /dev/null || die "need sha256sum or shasum to verify the download"
-
-# Checked before anything is downloaded, so a wrong path costs nothing.
-if [ -n "$RESTORE" ]; then
-  [ -f "$RESTORE" ] && [ -r "$RESTORE" ] || die "cannot read the backup file: $RESTORE"
-  RESTORE=$(cd "$(dirname "$RESTORE")" && pwd -P)/$(basename "$RESTORE")
-  if grep -q '"session"' "$ROOT/config.json" 2>/dev/null; then
-    die "$ROOT already has an account, and --restore is for a fresh install.
-  To replace that account with the backup, stop the service and run:
-    systemctl stop mibot-lite
-    $ROOT/mibot-lite --restore $RESTORE --root $ROOT --force
-  then run this installer again without --restore."
+die() { echo "$*" >&2; exit 1; }
+[ -z "$MIGRATE" ] || [ -z "$RESTORE" ] || die 'Choose migration or restore'
+case "$FROM" in auto|mibot-lite|mibox|telebox) ;; *) die 'Unsupported migration source';; esac
+case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) die 'Use install.ps1 on Windows';; esac
+case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; arm64|aarch64) ARCH=arm64;; *) die 'Unsupported architecture';; esac
+case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT";; esac
+# Service formats have expansion syntax; reject it before any changes.
+case "$ROOT" in *[!A-Za-z0-9._/-]*) [ "$SERVICE" = 0 ] || die 'Service root must contain only letters, numbers, / . _ -';; esac
+if [ "$SERVICE" = 1 ] && [ "$OS" = linux ]; then
+  [ "$(id -u)" = 0 ] || die 'Linux system service requires root; otherwise use --no-service'
+  command -v systemctl >/dev/null || die 'systemctl is required'
+fi
+if [ -n "$MIGRATE$RESTORE" ] && [ -d "$ROOT" ] && [ -n "$(ls -A "$ROOT")" ]; then die 'Migration/restore destination must be empty'; fi
+WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0
+UNIT=/etc/systemd/system/laowangbot.service
+[ "$OS" != darwin ] || UNIT="$HOME/Library/LaunchAgents/io.github.laowangbot.plist"
+service_stop() { if [ "$OS" = linux ]; then systemctl stop laowangbot; else launchctl bootout "gui/$(id -u)" "$UNIT"; fi; }
+service_start() { if [ "$OS" = linux ]; then systemctl daemon-reload && systemctl enable --now laowangbot && systemctl is-active --quiet laowangbot; else launchctl bootstrap "gui/$(id -u)" "$UNIT"; fi; }
+cleanup() {
+  rc=$?
+  if [ "$SUCCESS" = 0 ]; then
+    if [ "$CHANGED" = 1 ]; then
+      [ "$SERVICE" = 0 ] || service_stop >/dev/null 2>&1 || true
+      if [ "$HAD_BINARY" = 1 ]; then cp "$WORK/previous" "$ROOT/laowangbot"; else rm -f "$ROOT/laowangbot"; fi
+    fi
+    if [ "$UNIT_CHANGED" = 1 ]; then
+      if [ "$HAD_UNIT" = 1 ]; then cp "$WORK/unit" "$UNIT"; else rm -f "$UNIT"; fi
+    fi
+    [ "$STOPPED" = 0 ] || service_start || echo 'Previous service could not restart; inspect service logs' >&2
   fi
+  rm -rf "$WORK"
+  exit "$rc"
+}
+trap cleanup EXIT
+if [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
+  ASSET=laowangbot-$OS-$ARCH
+  if [ "$VERSION" = latest ]; then BASE="https://github.com/$REPO/releases/latest/download"; else BASE="https://github.com/$REPO/releases/download/$VERSION"; fi
+  curl -fLsS "$BASE/$ASSET" -o "$WORK/new"
+  curl -fLsS "$BASE/checksums.txt" -o "$WORK/checksums.txt"
+  WANT=$(awk -v n="$ASSET" '$2==n || $2=="*"n {print $1}' "$WORK/checksums.txt")
+  [ ${#WANT} = 64 ] || die 'Missing or ambiguous checksum'
+  if command -v sha256sum >/dev/null; then GOT=$(sha256sum "$WORK/new"); else GOT=$(shasum -a 256 "$WORK/new"); fi
+  [ "${GOT%% *}" = "$WANT" ] || die 'Checksum mismatch'
 fi
-
-case "$(uname -m)" in
-  x86_64|amd64) ARCH=amd64 ;;
-  aarch64|arm64) ARCH=arm64 ;;
-  *) die "no released build for $(uname -m); build from source" ;;
-esac
-ASSET="mibot-lite-linux-$ARCH"
-
-# A service running on *this* directory must not have its binary swapped
-# underneath it mid-request, so it is stopped first and started again at
-# the end. A service running on some other directory is none of this
-# install's business: asking systemd which root the unit actually points
-# at is what keeps `--root somewhere-else` from taking down a live bot,
-# which is exactly what an earlier version of this script did.
-OWNS_SERVICE=0
-if [ "$WITH_SERVICE" = 1 ] && systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
-  RUNNING_ROOT=$(systemctl show "$SERVICE" -p WorkingDirectory --value 2>/dev/null || true)
-  if [ "$RUNNING_ROOT" = "$ROOT" ]; then
-    OWNS_SERVICE=1
-  else
-    say "A mibot-lite service is running on ${RUNNING_ROOT:-another directory}; leaving it alone"
-  fi
+chmod 755 "$WORK/new"
+if [ "$SERVICE" = 1 ] && [ -f "$UNIT" ]; then
+  if [ "$OS" = linux ]; then EXISTING=$(systemctl show laowangbot -p WorkingDirectory --value); [ "$EXISTING" = "$ROOT" ] || die 'Existing service points at another root'; else grep -Fq "<string>$ROOT</string>" "$UNIT" || die 'Existing launch agent points at another root'; fi
+  cp "$UNIT" "$WORK/unit"; HAD_UNIT=1
 fi
-
-say "Fetching the latest release of $REPO"
-RELEASE=$(mktemp) && trap 'rm -rf "$RELEASE" "${WORK:-}"' EXIT
-curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" -o "$RELEASE" \
-  || die "could not read the release list; check the network and that $REPO has a release"
-
-url_of() { sed -n 's/.*"browser_download_url": *"\([^"]*\/'"$1"'\)".*/\1/p' "$RELEASE" | head -1; }
-TAG=$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$RELEASE" | head -1)
-BINARY_URL=$(url_of "$ASSET")
-SUMS_URL=$(url_of checksums.txt)
-[ -n "$BINARY_URL" ] || die "release ${TAG:-?} has no $ASSET build"
-[ -n "$SUMS_URL" ] || die "release ${TAG:-?} has no checksums.txt; refusing to install an unverified binary"
-say "Release $TAG, $ASSET"
-
-WORK=$(mktemp -d)
-curl -fsSL "$BINARY_URL" -o "$WORK/$ASSET" || die "download failed"
-curl -fsSL "$SUMS_URL" -o "$WORK/checksums.txt" || die "could not download checksums.txt"
-
-WANT=$(awk -v name="$ASSET" '$2 == name || $2 == "*" name {print $1}' "$WORK/checksums.txt" | head -1)
-[ ${#WANT} = 64 ] || die "checksums.txt has no entry for $ASSET"
-if command -v sha256sum > /dev/null; then
-  GOT=$(sha256sum "$WORK/$ASSET" | awk '{print $1}')
-else
-  GOT=$(shasum -a 256 "$WORK/$ASSET" | awk '{print $1}')
-fi
-[ "$GOT" = "$WANT" ] || die "SHA-256 mismatch: the download does not match the release"
-say "SHA-256 verified"
-
 mkdir -p "$ROOT"
-chmod 700 "$ROOT"
-
-# A restore brings the account with it, which is what makes the sign-in
-# below find a session and step aside.
-if [ -n "$RESTORE" ]; then
-  say "Restoring the configuration from $(basename "$RESTORE")"
-  chmod 755 "$WORK/$ASSET"
-  "$WORK/$ASSET" --restore "$RESTORE" --root "$ROOT" || die "the backup could not be restored; nothing was installed"
+[ -z "$MIGRATE" ] || "$WORK/new" --migrate "$MIGRATE" --from "$FROM" --root "$ROOT"
+[ -z "$RESTORE" ] || "$WORK/new" --restore "$RESTORE" --root "$ROOT"
+if [ ! -f "$ROOT/config.json" ]; then
+  if [ -t 0 ]; then "$WORK/new" --login --root "$ROOT"; else die "Login required: run installer in a terminal, or migrate an existing account"; fi
 fi
-
-# Sign in before anything is installed: a deployment with no account is
-# not worth starting, and the prompts need a keyboard.
-if ! grep -q '"session"' "$ROOT/config.json" 2>/dev/null; then
-  say "This directory has no account yet; signing in"
-  echo "   You will need the api_id and api_hash from https://my.telegram.org,"
-  echo "   your phone number, and the code Telegram sends you."
-  chmod 755 "$WORK/$ASSET"
-  if [ -t 0 ]; then
-    "$WORK/$ASSET" --login --root "$ROOT"
-  elif [ -r /dev/tty ]; then
-    "$WORK/$ASSET" --login --root "$ROOT" < /dev/tty
+"$WORK/new" --check --root "$ROOT"
+if [ "$SERVICE" = 1 ] && [ "$HAD_UNIT" = 1 ]; then
+  if [ "$OS" = linux ]; then
+    if systemctl is-active --quiet laowangbot; then service_stop; STOPPED=1; fi
+  elif launchctl print "gui/$(id -u)/io.github.laowangbot" >/dev/null 2>&1; then service_stop; STOPPED=1; fi
+fi
+if [ -f "$ROOT/laowangbot" ]; then cp "$ROOT/laowangbot" "$WORK/previous"; HAD_BINARY=1; fi
+cp "$WORK/new" "$ROOT/.laowangbot.new"
+mv "$ROOT/.laowangbot.new" "$ROOT/laowangbot"; CHANGED=1
+if [ "$SERVICE" = 1 ]; then
+  mkdir -p "$(dirname "$UNIT")"; UNIT_CHANGED=1
+  if [ "$OS" = linux ]; then
+    cat > "$UNIT" <<UNIT
+[Unit]
+Description=laowangbot
+After=network-online.target
+[Service]
+WorkingDirectory=$ROOT
+ExecStart=$ROOT/laowangbot --supervise --root $ROOT
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+[Install]
+WantedBy=multi-user.target
+UNIT
   else
-    install -m 755 "$WORK/$ASSET" "$ROOT/mibot-lite"
-    die "no terminal to ask for the code on. The binary is installed; run:
-    $ROOT/mibot-lite --login --root $ROOT
-  then run this installer again."
+    cat > "$UNIT" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>io.github.laowangbot</string>
+<key>ProgramArguments</key><array><string>$ROOT/laowangbot</string><string>--supervise</string><string>--root</string><string>$ROOT</string></array>
+<key>WorkingDirectory</key><string>$ROOT</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>$ROOT/service.log</string>
+<key>StandardErrorPath</key><string>$ROOT/service.err.log</string>
+</dict></plist>
+PLIST
   fi
+  service_start
 fi
-
-if [ "$OWNS_SERVICE" = 1 ]; then
-  say "Stopping the running service to replace its binary"
-  systemctl stop "$SERVICE"
-fi
-install -m 755 "$WORK/$ASSET" "$ROOT/mibot-lite"
-
-say "Checking that this build can read $ROOT"
-"$ROOT/mibot-lite" --check --root "$ROOT" || die "the new binary cannot read this deployment; nothing was started"
-
-if [ "$WITH_SERVICE" = 0 ]; then
-  say "Installed to $ROOT/mibot-lite (service untouched)"
-  exit 0
-fi
-
-# Installing over a unit that points somewhere else would repoint the
-# service at this directory without saying so.
-if [ -f "$UNIT" ]; then
-  EXISTING_ROOT=$(systemctl show "$SERVICE" -p WorkingDirectory --value 2>/dev/null || true)
-  if [ -n "$EXISTING_ROOT" ] && [ "$EXISTING_ROOT" != "$ROOT" ]; then
-    die "$SERVICE already points at $EXISTING_ROOT.
-  Installing here would repoint it at $ROOT and orphan that deployment.
-  Use --root $EXISTING_ROOT to upgrade it, or remove the unit first."
-  fi
-fi
-
-# systemd-analyze reads the file name as the unit name, so the rendered
-# copy has to carry it.
-[ "${ROOT#/}" != "$ROOT" ] || die "the deployment path must be absolute: $ROOT"
-case "$ROOT" in *[!A-Za-z0-9._/-]*) die "deployment path must be free of unit metacharacters: $ROOT" ;; esac
-STAGING=$(mktemp -d)
-curl -fsSL "https://raw.githubusercontent.com/$REPO/$TAG/deploy/mibot-lite.service" -o "$STAGING/template" \
-  || die "could not download the service template"
-sed -e "s|@ROOT@|$ROOT|g" -e "s|@BINARY@|$ROOT/mibot-lite|g" "$STAGING/template" > "$STAGING/$SERVICE"
-grep -q '@[A-Z][A-Z]*@' "$STAGING/$SERVICE" && die "service template has unsubstituted placeholders"
-command -v systemd-analyze > /dev/null && systemd-analyze verify "$STAGING/$SERVICE"
-install -m 644 "$STAGING/$SERVICE" "$UNIT"
-rm -rf "$STAGING"
-
-systemctl daemon-reload
-systemctl reset-failed mibot-lite 2> /dev/null || true
-# Readiness is judged from this moment on, so the line the outgoing version
-# logged when it started cannot be read as the new one coming up.
-SINCE=$(date '+%Y-%m-%d %H:%M:%S')
-systemctl enable --now mibot-lite
-
-# Deliberately not `journalctl … | grep -q`. That reads correctly and is
-# wrong: grep leaves on the first match, journalctl dies of SIGPIPE, and
-# under `set -o pipefail` the pipeline reports 141 — so the check failed
-# on every successful start and the installer announced a failure over a
-# service that was already running.
-for _ in $(seq 30); do
-  LOG=$(journalctl -u mibot-lite --since "$SINCE" --no-pager -o cat 2> /dev/null || true)
-  case $LOG in
-    *msg=runtime.ready*)
-      say "MiBot Lite $TAG is running and enabled at boot"
-      printf '%s\n' \
-        "   Try .help and .ping in Telegram." \
-        "   Logs:    journalctl -u mibot-lite -f" \
-        "   Upgrade: re-run this installer, or .update run in Telegram"
-      exit 0
-      ;;
-  esac
-  systemctl is-active --quiet mibot-lite || break
-  sleep 2
-done
-die "the service did not report runtime.ready; inspect: journalctl -u mibot-lite -n 50"
+[ "$HAD_BINARY" = 0 ] || cp "$WORK/previous" "$ROOT/laowangbot.previous"
+SUCCESS=1
+printf 'Installed %s (local configuration checked; Telegram connectivity not verified)\n' "$ROOT/laowangbot"

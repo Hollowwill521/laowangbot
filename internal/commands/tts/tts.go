@@ -20,13 +20,13 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
-	"github.com/MiCat-S/mibot-lite/internal/media"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/media"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // endpoint 是 fish.audio 的合成接口。可以用环境变量 MIBOT_FISH_ENDPOINT 换掉，测试用。
@@ -168,6 +168,9 @@ func synthesize(ctx context.Context, config document, key, voiceID, text string)
 	}
 	target := endpoint
 	if override := os.Getenv("MIBOT_FISH_ENDPOINT"); override != "" {
+		target = override
+	}
+	if override := os.Getenv("LAOWANGBOT_FISH_ENDPOINT"); override != "" {
 		target = override
 	}
 	response, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: target, Headers: headers, Body: body,

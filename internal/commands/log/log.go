@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/logtail"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/logtail"
 )
 
 // 日志以文件而不是消息的形式发出。它本来就是要转给帮忙排查的人的，
@@ -59,7 +59,7 @@ func logHeader(a *app.App, shown, held int, filter string) string {
 		level = a.Level.Level().String()
 	}
 	lines := []string{
-		"mibot-lite " + a.Version,
+		"laowangbot " + a.Version,
 		"运行时长 " + shortDuration(time.Since(a.Started)),
 		"命令 " + strconv.Itoa(len(a.Registry.Commands())) + " 个",
 		"日志级别 " + level,
@@ -151,7 +151,7 @@ func Register(a *app.App) {
 		if err != nil {
 			return err
 		}
-		name := "mibot-lite-" + time.Now().Format("20060102-1504") + ".log"
+		name := "laowangbot-" + time.Now().Format("20060102-1504") + ".log"
 		caption := "📄 运行日志 " + command.Code(a.Version) + " · " + strconv.Itoa(len(lines)) + " 行\n<i>已脱敏，可直接转发</i>"
 		if err := inv.Client.SendDocument(ctx, peer, name, logMimeType, []byte(body), caption, 0); err != nil {
 			return err

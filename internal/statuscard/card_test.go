@@ -8,10 +8,10 @@ import (
 )
 
 func TestRender(t *testing.T) {
-	card := Card{Name: "MiBot Lite", Uptime: 50*time.Hour + 3*time.Minute + 4*time.Second,
+	card := Card{Name: "laowangbot", Uptime: 50*time.Hour + 3*time.Minute + 4*time.Second,
 		CPU: Gauge{Percent: 12, Known: true}, Memory: Gauge{Percent: 80, Known: true},
 		Disk: Gauge{Percent: 95, Known: true}, Swap: Gauge{},
-		Footer: "MiBot Lite 0.1.23 · Go go1.26 · gotd v0.162.0"}
+		Footer: "laowangbot 0.1.23 · Go go1.26 · gotd v0.162.0"}
 	data, err := Render(card)
 	if err != nil {
 		t.Fatal(err)

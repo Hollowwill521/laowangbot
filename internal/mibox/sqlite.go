@@ -1,6 +1,6 @@
 // Package mibox 读取 MiBox 部署里的数据，供 --import-mibox 迁移用。
 //
-// MiBox 有些数据存在 SQLite 里（比如别名）。mibot-lite 为了省内存不带 SQLite，
+// MiBox 有些数据存在 SQLite 里（比如别名）。laowangbot 为了省内存不带 SQLite，
 // 这里只实现迁移需要的那一小部分：按 SQLite 文件格式读出一张普通表的全部行。
 // 格式见 https://www.sqlite.org/fileformat.html 。
 package mibox
@@ -43,7 +43,8 @@ func (f *sqliteFile) page(n uint32) ([]byte, error) {
 }
 
 // rows 按 rowid 顺序读出以 root 为根的表 B 树里的每一行。
-func (f *sqliteFile) rows(root uint32) ([][]any, error) {
+func (f *sqliteFile) rows(root uint32) ([][]any, error) { return f.rowsWithID(root, false) }
+func (f *sqliteFile) rowsWithID(root uint32, primaryID bool) ([][]any, error) {
 	var out [][]any
 	visited := map[uint32]bool{}
 	var walk func(n uint32) error
@@ -81,7 +82,7 @@ func (f *sqliteFile) rows(root uint32) ([][]any, error) {
 				}
 			case 0x0D: // 叶子页：负载长度、rowid、负载
 				size, used := varint(page[offset:])
-				_, rowidLen := varint(page[offset+used:])
+				rowid, rowidLen := varint(page[offset+used:])
 				payload, err := f.payload(page, offset+used+rowidLen, int(size))
 				if err != nil {
 					return err
@@ -89,6 +90,9 @@ func (f *sqliteFile) rows(root uint32) ([][]any, error) {
 				row, err := record(payload)
 				if err != nil {
 					return err
+				}
+				if primaryID && len(row) > 0 && row[0] == nil {
+					row[0] = int64(rowid)
 				}
 				out = append(out, row)
 			default:
@@ -223,7 +227,7 @@ func readTable(data []byte, name string) ([][]any, error) {
 			if !ok || root <= 0 {
 				return nil, errors.New("表的根页号异常")
 			}
-			return file.rows(uint32(root))
+			return file.rowsWithID(uint32(root), name == "users" || name == "chats" || name == "msgs")
 		}
 	}
 	return nil, fmt.Errorf("没有 %s 表", name)

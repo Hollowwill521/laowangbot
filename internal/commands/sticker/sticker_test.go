@@ -13,8 +13,8 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // packs 是一个只懂三个贴纸接口的假 Telegram：包名 → 已有张数，capacity 张就满。

@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/statuscard"
-	"github.com/MiCat-S/mibot-lite/internal/sysinfo"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/statuscard"
+	"github.com/OrionG-hub/laowangbot/internal/sysinfo"
 )
 
 // drawing 让状态卡片同一时间只画一张：画一张要几 MB 画布，别人借用 .status 连发时不叠加。
@@ -81,7 +81,7 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	defer drawing.Unlock()
 	resources := sysinfo.SampleResources(ctx, a.Root, 160*time.Millisecond)
 	caption := statusCaption(a, registry, resources)
-	footer := "MiBot Lite " + kit.Version(a) + "  ·  Go " + runtime.Version()
+	footer := "laowangbot " + kit.Version(a) + "  ·  Go " + runtime.Version()
 	if version := gotdVersion(); version != "" {
 		footer += "  ·  gotd " + version
 	}
@@ -89,7 +89,7 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	if resources.HasCPU {
 		cpu = statuscard.Gauge{Percent: resources.SystemCPU, Known: true}
 	}
-	card, err := statuscard.Render(statuscard.Card{Name: "MiBot Lite", Uptime: time.Since(a.Started), CPU: cpu,
+	card, err := statuscard.Render(statuscard.Card{Name: "laowangbot", Uptime: time.Since(a.Started), CPU: cpu,
 		Memory: gaugeOf(resources.Memory), Disk: gaugeOf(resources.Disk), Swap: gaugeOf(resources.Swap), Footer: footer})
 	// 画布有几 MB，发完马上还给系统，不让一次 .status 抬高常驻内存。
 	defer debug.FreeOSMemory()
@@ -105,5 +105,5 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	} else {
 		inv.Log.Warn("status.card_render_failed", "error", err.Error())
 	}
-	return inv.Edit(ctx, "<b>MiBot Lite 状态</b>\n\n"+caption)
+	return inv.Edit(ctx, "<b>laowangbot 状态</b>\n\n"+caption)
 }

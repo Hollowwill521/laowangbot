@@ -1,235 +1,100 @@
-# MiBot Lite
+# laowangbot
 
-[简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | **日本語**
+[简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
-メモリ消費の少ない Telegram ユーザーボットです。静的リンクされた Go のバイナリ 1 つで動き、コマンドはプログラムに
-組み込まれ、状態は JSON ファイルに保存されます。
+**Go コア · 独立プロセスのプラグイン · 移行対応 Telegram UserBot**
 
-[MiBox](https://github.com/MiCat-S/Mi-Box) の軽量版にあたります。アカウント、セッション、`config.json`、コマンド名は
-すべて同じなので、MiBox からそのまま乗り換えられ、設定もコマンド 1 つで移行できます。省いたのはプラグイン機構で、
-JavaScript ランタイムも SQLite もなく、常駐メモリは Node 版 MiBox の半分以下です。
+laowangbot は既存の組み込みコマンドを維持し、別プロセスで動く拡張機能を追加します。コアに Node.js は不要です。プラグインの言語ランタイムは個別に用意し、一部のメディア機能は ffmpeg を使用します。
 
-| | MiBox（Node） | MiBot Lite |
-|---|---|---|
-| 常駐メモリ（RSS） | 約 125 MB | **約 30–50 MB** |
-| インストールサイズ | node_modules、約 237 パッケージ | **約 21 MB のファイル 1 つ** |
-| プラグインランタイム | V8 | なし |
-| データ保存 | better-sqlite3 | JSON ファイル |
-| 画像処理 | sharp（libvips） | 標準ライブラリ + `golang.org/x/image` |
-| コマンドの追加 | `.tpm install` | コードを変更して再ビルド |
+## 現在の状態
 
-メモリは同じ本番マシンで実測した値です。接続直後は約 30 MB、数時間動かした後は約 50 MB で、そのうち 20 MB 近くは
-バイナリ自体がマップされたページです。スタンプ生成時に一時的に起動する ffmpeg の子プロセスは含みません
-（[設計上の判断](#設計上の判断)を参照）。
+プロジェクトは `github.com/OrionG-hub/laowangbot` で公開されています。公式 Release に各プラットフォームのバイナリとチェックサムがあります。Docker イメージは未公開のため、コンテナはソースからローカルでビルドしてください。
 
-## インストール
+## クイックスタート
 
-サーバーで実行します（Linux amd64 / arm64、systemd、root）：
+### ワンコマンド導入
+
+Go や Node.js は不要です。インストーラーが最新の公式 Release を取得して SHA-256 を検証し、対話式ログイン後にバックグラウンドタスクを開始します。対応バイナリと `checksums.txt` の公開が必要です。未公開時は下のソースからの手順を使ってください。
 
 ```sh
-bash <(curl -fsSL https://raw.githubusercontent.com/MiCat-S/mibot-lite/main/scripts/install.sh)
+# Linux
+sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root /opt/laowangbot'
+
+# macOS
+bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root "$HOME/laowangbot-data"
 ```
 
-ダウンロード、検証、ログイン、サービスとしての登録まで一度に行います。もう一度実行するとアップグレードになり、
-その後は Telegram で `.update run` を送っても更新できます。手順の詳細、設定項目、メモリ上限は
-[INSTALL.md](INSTALL.md)（中国語）にあります。
+```powershell
+# Windows PowerShell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Root "$env:LOCALAPPDATA\laowangbot"
+```
 
-- **ffmpeg**：`.eatgif`、`.eat`、`.eat2`、`.t` で使い、`.yvlu` で動画を引用するときにも使います。入っていなくても
-  他のコマンドには影響しません。`apt install -y ffmpeg`。
-- **MiBox からの移行**：ai、sum、whois、エイリアス、プレフィックスなどの設定をそのまま移せます：
+Linux は systemd、macOS はユーザーの launchd、Windows はユーザーログオン時のタスクを使用します。導入後は「保存したメッセージ」で `.ping` と `.help` を送り、接続を確認してください。ログインには Telegram API ID、API hash、電話番号と確認コードが必要です。全オプションは [INSTALL.md](INSTALL.md) を参照してください。
 
-  ```sh
-  ./mibot-lite --import-mibox /root/mibot --root /root/mibot-lite
-  ```
+### ソースからの導入と移行
 
-  同じアカウントで 2 つのプログラムを行き来できますが、**同時に動かすことはできません**。同じアカウントの接続が
-  2 つあると、Telegram 上で互いに切断し合います。
-- **OS の再インストールやマシンの移転**：Telegram で `.bf` を送ると設定が「保存済みメッセージ」にバックアップされます。
-  新しいマシンではインストールスクリプトに `--restore バックアップファイル` を付ければ、再ログインなしでそのまま
-  復元できます。[INSTALL.md 第 10 節](INSTALL.md#10-备份与恢复重装系统换机器)を参照してください。
+ソースのビルドには Go 1.26 が必要です。ソースディレクトリでビルドし、信頼するローカルバイナリを各環境に導入します。
+
+```sh
+bash scripts/build.sh ./laowangbot
+
+# Linux
+sudo bash scripts/install.sh --binary "$PWD/laowangbot" --root /opt/laowangbot
+
+# macOS
+bash scripts/install.sh --binary "$PWD/laowangbot" --root "$HOME/laowangbot-data"
+```
+
+```powershell
+# Windows PowerShell
+go build -trimpath -o .\laowangbot.exe .\cmd\laowangbot
+.\scripts\install.ps1 -Binary "$PWD\laowangbot.exe" -Root "$env:LOCALAPPDATA\laowangbot"
+```
+
+```sh
+# Migration
+bash scripts/install.sh --binary "$PWD/laowangbot" \
+  --migrate /path/to/old-bot --from auto \
+  --root "$HOME/laowangbot-data"
+```
+
+移行前に旧インスタンスを停止し、空の移行先を指定してください。Linux の移行にも `sudo` を付けるか、`--no-service` を指定します。新規導入と移行はどちらかを選んでください。
 
 ## コマンド
 
-デフォルトのプレフィックスは `.`、`。`、`$` で、`.prefix` で変更できます。各コマンドの詳しい使い方は
-`.help コマンド` を送るか、コマンドの後ろに `--help` を付けてください。
+既定の接頭辞は `.`、`。`、`$`、`，` です。移行時はカスタム設定を保持します。詳細は `.help コマンド` で確認できます。実行時メッセージは主に中国語です。README の翻訳は実行時の完全な多言語対応を意味しません。
 
-「貸出」列は、[`.sudo` / `.sure`](#アカウントの貸し出しsudo-と-sure) で他の人に使わせられるかどうかを示します。
-✓ はコマンド全体を貸し出せるもの、**一部** は調べる・使う部分だけを貸し出せて設定を変えるサブコマンドは本人専用のもの、
-空欄は本人専用です。
-
-**運用とメンテナンス**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.ping [ドメイン]` | Telegram またはウェブサイトまでの遅延 | ✓ |
-| `.status` | 状態カード（CPU、メモリ、ディスク、Swap） | ✓ |
-| `.memory` | プロセスのメモリ | ✓ |
-| `.sysinfo` | 詳しいシステム情報 | |
-| `.version` `.ver` | バージョン情報 | ✓ |
-| `.help` `.h` | コマンド一覧、または個々のコマンドの説明 | ✓ |
-| `.update [check\|run\|rollback]` | 更新の確認、適用、ロールバック | |
-| `.restart` | サービスを再起動 | |
-| `.log` | 実行ログを書き出す（機密情報は除去済み） | |
-| `.bf` | 設定を「保存済みメッセージ」にバックアップ | |
-| `.prefix` `.alias` | コマンドのプレフィックスを変更、コマンドに別名を付ける | |
-| `.privacy` | 出力に含まれる IP アドレスの伏せ方を設定 | |
-
-**検索とツール**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.calc 式` | 四則演算 | ✓ |
-| `.rate 通貨 [換算先] [金額]` | 為替レートと換算 | ✓ |
-| `.tr [言語] テキスト` | Google 翻訳、設定不要 | ✓ |
-| `.gt [言語] テキスト` | AI 翻訳 | ✓ |
-| `.whois ドメイン` | ドメインの登録情報、一括検索にも対応 | 一部 |
-| `.ip [IP\|ドメイン]` | IP の所在地と回線事業者 | ✓ |
-| `.bin カード番号の先頭 6–8 桁` | カード番号に対応する発行銀行 | ✓ |
-| `.ids` `.dc` | ユーザーやチャットの情報と、所属するデータセンター | ✓ |
-| `.speedtest` `.st` | サーバーの回線速度測定（Ookla 公式 CLI） | 一部 |
-
-**AI**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.ai [search] 質問` | AI との対話とウェブ検索 | 一部 |
-| `.sum [件数]` | グループのメッセージの要約、定期実行も可能 | 一部 |
-
-**メッセージとスタンプ**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.yvlu` | メッセージを引用スタンプ、画像、ストーリーにする | 一部 |
-| `.eatgif 名前` | 2 人のプロフィール画像からアニメーションスタンプを作る | 一部 |
-| `.eat` `.eat2` | プロフィール画像や写真からミームスタンプを作る | 一部 |
-| `.sticker` | スタンプを自分のスタンプセットに保存 | |
-| `.t テキスト` | 音声読み上げ（`.ts` で声を選び、`.tk` で API キーを設定） | |
-| `.re [件数] [回数]` | 返信先のメッセージを繰り返し転送 | ✓ |
-| `.save リンク` | メッセージを保存・転送、転送禁止のものも可能 | |
-| `.dme 件数` | 自分のメッセージを削除 | |
-| `.da` | グループのメッセージを一括削除 | |
-
-**グループ管理**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.ban` `.unban` `.kick` `.mute` `.unmute` | 今のグループで BAN、キック、ミュート | ✓ |
-| `.sb` `.unsb` | 管理しているすべてのグループで BAN、BAN 解除 | |
-| `.refresh` | 管理グループの一覧を更新（普段は 1 日 1 回自動で更新） | |
-| `.aban` | 上記コマンドのヘルプ | |
-
-**アカウント**
-
-| コマンド | 内容 | 貸出 |
-|---|---|---|
-| `.acn` `.autochangename` | 時刻や天気に合わせて表示名を自動で変更 | |
-| `.sudo` `.sure` | リストに載せた人にコマンドを貸し出す（後述） | |
-
-### アカウントの貸し出し：.sudo と .sure
-
-どちらも、リストに載せた人があなたのアカウントを通じてコマンドを実行できるようにするものです。相手がグループで
-メッセージを送ると、アカウントがあなたとして同じチャットにコマンドを送り、同じ相手に返信します。`.sudo` では相手が
-コマンドを直接送ります。`.sure` はもっと範囲が狭く、相手のメッセージがあなたの決めたルールに合ったときだけ動き、
-書き換えもできます。たとえばメンバーが送った `/sb` を `.ban` に変える、といった使い方です。
-
-MiBox と違い、**貸し出せる範囲はホワイトリスト**、つまり上の表の「貸出」列です。MiBox ではリストに載った人が
-どのコマンドでも実行でき、`.sudo add` 自体も例外ではないため、許可された人がさらに別の人に許可を出せてしまいます。
-ここではエイリアスを展開した後の実際のコマンドで判定するので、別名を付けてもすり抜けられません。今後追加される
-コマンドやサブコマンドも、デフォルトでは貸し出せません。リストの人が貸し出せないコマンドを送った場合、アカウントは
-権限がないと一言返すだけです。
-
-リストは `data/sudo.json` と `data/sure.json` に保存され、`.bf` のバックアップにも含まれます。
-
-### IP アドレスを伏せる：.privacy
-
-MiBox v2 と同じく、アカウントが送信・編集するすべてのメッセージで IP アドレスが伏せられます。デフォルトでは
-IPv4 は後ろ 2 つ、IPv6 は後ろ 4 つの区切りを伏せ、IP を指すリンクは取り除き、ファイル名に含まれる IP も同様に
-伏せます。`.privacy ip mask 2 4` で伏せる数を変え、`.privacy ip hide` でアドレス全体を「[IP已隐藏]」（IP 非表示）に
-置き換えます。
-
-伏せる処理は接続層で行うので、すべてのコマンドの出力が対象になります。他の人の代わりに送るコマンド（`.sudo`、
-`.sure`）は伏せません。そのアドレスはもともと相手自身が入力したものだからです。
-
-## 設計上の判断
-
-### プラグイン機構をなくした理由
-
-MiBox 本体は任意の TypeScript プラグインを読み込むため、JS エンジン、SQLite、プラグインのライフサイクル一式を
-常駐させる必要があり、これがメモリ消費の主な原因です。MiBot Lite はこの前提を変えました。コマンドは実行中に
-インストールできる部品ではなく、バイナリに組み込まれた Go の関数です。コマンドを追加するには再ビルドが必要ですが、
-その代わり常駐メモリがずっと小さくなり、サンドボックスの要らないコードになります。
-
-### 画像と動画
-
-`.yvlu` と `.eatgif` は画像を合成します。MiBox は sharp を使っていますが、これは libvips に依存しており、共有
-ライブラリ、画像キャッシュ、スレッドプールを、1 日に数回しか使わない機能のためにプロセスに常駐させます。ここでは
-標準ライブラリの `image/draw` と `golang.org/x/image` のスケーラーに置き換えました。バイナリの増加は 0.7 MB だけで、
-使っていないときはメモリを消費しません。
-
-唯一の外部依存は ffmpeg です。Telegram の動画スタンプは VP9 でなければならず、純粋な Go でエンコードするのは
-現実的ではありません。ffmpeg は子プロセスなので使っていないときはメモリを消費しませんが、**動いている間は 100 MB 以上
-必要です**。そのため systemd ユニットでは `MemoryMax` を常駐サイズぎりぎりではなく 512M にし、`MemoryHigh` は
-**設定していません**。MemoryHigh は超えても失敗せず、メモリの強制回収を繰り返してプロセスを極端に遅くします。ある
-エンコードでは 14,000 回以上発生し、エンコードは終わる前に自身のタイムアウトに達し、原因を示すものは何も残りません
-でした。
-
-MiBox との違いが 2 つあります：
-
-- **eatgif は GIF を経由しません**。元の実装はフレームを GIF にエンコードしてから VP9 に変換しており、その途中で
-  各フレームが 256 色に減色されていました。ここでは PNG のフレーム列を直接 ffmpeg に渡し、非可逆な中間変換を 1 回
-  省いています。
-- **yvlu は tgs アニメーションスタンプの変換に対応していません**。その処理には Python の `rlottie-python` が必要ですが、
-  本番マシンにはもともと入っておらず、移植しても今動いていない機能を移すだけになるためです。それ以外の挙動は元の
-  実装と 1 つずつ突き合わせています：複数メッセージは連番の ID ではなく実際の履歴から取得、転送は元の投稿者の
-  発言として扱う、部分引用、管理者の肩書き、絵文字ステータス、大きいプロフィール画像へのフォールバック。
-
-## 開発
-
-```sh
-go test ./...          # すべてのテスト
-go vet ./...
-bash scripts/build.sh  # バージョン番号付きでビルド
-```
-
-実際のアカウントでのセルフチェック（読み取り専用のコマンドを「保存済みメッセージ」に送り、返信を確認してから削除）。
-同じアカウントで同時に 2 つ接続することはできないので、先にサービスを止めてください：
-
-```sh
-./mibot-lite --verify --root /デプロイ先ディレクトリ
-```
-
-実際の素材で画像合成を検証する（デフォルトではスキップ）：
-
-```sh
-MIBOT_EATGIF_ASSETS=/path/to/eatgif go test ./internal/imaging/ -run RealAnimation -v
-```
-
-コードの構成：
-
-| 場所 | 内容 |
+| 分類 | コマンド |
 |---|---|
-| `cmd/mibot-lite` | エントリーポイント |
-| `internal/app` | 接続と更新の振り分け |
-| `internal/bot` | Telegram のラッパー。レート制限時の再試行や IP の伏せ字といった接続層のミドルウェアを含む |
-| `internal/command` | コマンドの登録と振り分け |
-| `internal/commands/<コマンド>/` | コマンドの実装。1 ディレクトリに 1 コマンド、またはデータを共有するコマンドのグループ |
-| `internal/commands/kit` | コマンド共通の小さなユーティリティ |
+| 運用 | `ping` `status` `memory` `sysinfo` `version` / `ver` `help` / `h` `update` `restart` `log` `bf` |
+| 設定・プラグイン | `prefix` `alias` `privacy` `tpm` |
+| 検索・ツール | `calc` `rate` `tr` `gt` `whois` `ip` `bin` `ids` `dc` `speedtest` / `st` |
+| AI | `ai` `sum` |
+| メッセージ・メディア | `yvlu` `eatgif` `eat` `eat2` `sticker` `t` `ts` `tk` `re` `save` `dme` `da` |
+| グループ管理 | `ban` `unban` `kick` `mute` `unmute` `sb` `unsb` `refresh` `aban` |
+| アカウント・権限 | `acn` / `autochangename` `sudo` `sure` |
 
-まとめて置いてあるコマンド：`aban` はグループ管理コマンドすべて、`ids` は `.dc` を含み、`sudo` は `.sure` を含み、
-`eatgif` は `.eat` を含みます。`.t` は `tts` にあり、`.status` などの基本コマンドは `core` にあります。
+## ドキュメント
 
-コマンドを追加するには、`internal/commands/xxx/` ディレクトリを作って `Register(a *app.App)` を書き、その中で
-`a.Registry.Register(&command.Command{...})` を呼び、`internal/commands/register.go` の `RegisterAll` に登録します。
-他の人に貸し出せるようにするには、`internal/commands/sudo/sudo.go` のホワイトリストへの追加も必要です。
+以下の詳細ドキュメントは現在、簡体字中国語で提供しています。
 
-リポジトリにあるテストは、外部環境に依存しない純粋なロジックだけを対象にしています。偽の Telegram を使った振る舞いの
-テスト、スナップショットテスト、実際のサービスにつなぐテスト（ファイル名 `*_local_test.go`、および
-`internal/commands/testkit` と各コマンドの `testdata`）はメンテナーの手元だけに置いてあり、`.gitignore` に
-記載しています。
+- [導入と運用](INSTALL.md): Linux / macOS / Windows / Docker
+- [設定](docs/configuration.md): `LAOWANGBOT_*`, legacy `MIBOT_*`
+- [移行](docs/migration.md): mibot-lite / MiBox / TeleBox
+- [プラグイン仕様](docs/plugins.md): `.tpm`, local / remote
+- [設計と開発](docs/architecture.md): Go, JSON, processes
 
-## ライセンス
+移行は既知の設定を変換し、旧リソースとプラグインを保存します。未対応の TypeScript プラグインには手動の適応が必要で、そのまま実行できません。同じセッションを旧・新インスタンスで同時に使用しないでください。
 
-LGPL-2.1（MiBox と同じ）。
+## 検証と由来
 
-状態カードのフォントは Noto Sans SC のサブセット（`internal/statuscard/NotoSansSC-status-subset.ttf`）で、
-SIL Open Font License 1.1 のもとで配布しています。ライセンス文は同じディレクトリの `NotoSansSC-OFL.txt` です。
+```sh
+go test ./... -coverprofile=coverage.out
+go test -tags=integration ./...
+go tool cover -func=coverage.out
+go vet ./...
+```
+
+以下の単体・統合テストとカバレッジ確認を実行します。CI 定義やクロスコンパイルだけでは対象環境の動作を保証できません。Linux、Windows、Docker の実配備と Telegram 実アカウントの検証は未完了です。上流のメモリ使用量を本プロジェクトの測定値として扱いません。
+
+[MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) の `dbc404a2323061c4abd7f13088622e1d045153fa` を起点とし、ローカルブランチは `refactor/laowangbot` です。元の著作者表示と [LGPL-2.1](LICENSE) を維持します。Noto Sans SC のサブセットは [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) で配布されます。

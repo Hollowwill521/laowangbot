@@ -1,0 +1,11 @@
+services:
+  laowangbot:
+    build:
+      context: .
+      args:
+        WITH_FFMPEG: "true"
+    restart: unless-stopped
+    init: true
+    volumes:
+      - ./runtime:/data
+    stop_grace_period: 30s

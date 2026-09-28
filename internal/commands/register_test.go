@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/sudo"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/sudo"
 )
 
 // 表里写的命令都得真的存在；拼错了就等于悄悄少借出去一个。

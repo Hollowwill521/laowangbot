@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 )
 
 func TestLookupForHelp(t *testing.T) {

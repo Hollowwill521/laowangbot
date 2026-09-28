@@ -8,7 +8,7 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 // Telegram 给出的四种链接形式，以及一些只是看起来像链接的东西。

@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	gotdlog "github.com/gotd/log"
@@ -25,12 +25,13 @@ import (
 	"github.com/gotd/td/tg"
 	"golang.org/x/net/proxy"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/config"
-	"github.com/MiCat-S/mibot-lite/internal/logtail"
-	"github.com/MiCat-S/mibot-lite/internal/session"
-	"github.com/MiCat-S/mibot-lite/internal/tgstate"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/config"
+	"github.com/OrionG-hub/laowangbot/internal/logtail"
+	"github.com/OrionG-hub/laowangbot/internal/platform"
+	"github.com/OrionG-hub/laowangbot/internal/session"
+	"github.com/OrionG-hub/laowangbot/internal/tgstate"
 )
 
 // Options 是一次运行的配置。
@@ -40,7 +41,8 @@ type Options struct {
 	Logger  *slog.Logger
 	Debug   bool
 	// Register 在注册表建好之后添加命令。
-	Register func(app *App)
+	Register  func(app *App)
+	Configure func(app *App) error
 	// Logs 保存最近的一段日志，供 .log 显示。没有它程序照样能跑，
 	// 只是 .log 会说明当前没有保留日志。
 	Logs *logtail.Ring
@@ -83,7 +85,15 @@ type App struct {
 	options    Options
 	hookResult atomic.Pointer[error]
 	// foreign 是看别人消息的监听者（.sure、.sudo）。只在注册阶段添加，之后只读。
-	foreign []ForeignListener
+	foreign          []ForeignListener
+	observers        []ForeignListener
+	shutdown         context.CancelFunc
+	restartRequested atomic.Bool
+	jobs             sync.WaitGroup
+	closeMu          sync.Mutex
+	closed           bool
+	cleanup          []func()
+	closeErr         error
 }
 
 // sleepFor 等待一段时间，ctx 结束时提前返回。
@@ -102,24 +112,9 @@ func sleepFor(ctx context.Context, d time.Duration) error {
 const SessionFile = "gotd-session.json"
 
 // ErrRunning 表示部署目录已被另一个进程占用。
-var ErrRunning = errors.New("another mibot-lite instance already runs on this directory")
+var ErrRunning = platform.ErrRunning
 
-// LockRoot 给部署目录加单实例锁。
-//
-// 服务时加锁，是为了不让两个进程同时替一个账号应答。恢复备份也要加锁，
-// 理由正好反过来：在运行中的服务底下改写 config.json，服务手里的会话
-// 就和文件里记的对不上了。
-func LockRoot(root string) (*os.File, error) {
-	lock, err := os.OpenFile(filepath.Join(root, "mibot-lite.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		lock.Close()
-		return nil, ErrRunning
-	}
-	return lock, nil
-}
+func LockRoot(root string) (*os.File, error) { return platform.LockRoot(root) }
 
 // DataDir 是命令存放 JSON 文件的目录。
 func (a *App) DataDir() string { return filepath.Join(a.Root, "data") }
@@ -140,16 +135,18 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 	}
 	env := config.ReadEnv(root, os.Environ())
 
-	storage := &gotdsession.FileStorage{Path: filepath.Join(root, SessionFile)}
-	if _, err := session.Import(ctx, storage, cfg.Session, false); err != nil {
-		return nil, fmt.Errorf("convert session: %w", err)
-	}
-
 	var lock *os.File
 	if !options.ReadOnly {
 		if lock, err = LockRoot(root); err != nil {
 			return nil, err
 		}
+	}
+	storage := &gotdsession.FileStorage{Path: filepath.Join(root, SessionFile)}
+	if _, err := session.Import(ctx, storage, cfg.Session, false); err != nil {
+		if lock != nil {
+			lock.Close()
+		}
+		return nil, fmt.Errorf("convert session: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "data"), 0o700); err != nil {
 		if lock != nil {
@@ -213,7 +210,9 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 		}
 		dialer, err := proxy.SOCKS5("tcp", net.JoinHostPort(cfg.Proxy.IP, strconv.Itoa(cfg.Proxy.Port)), auth, &net.Dialer{Timeout: 10 * time.Second})
 		if err != nil {
-			lock.Close()
+			if lock != nil {
+				lock.Close()
+			}
 			return nil, fmt.Errorf("proxy: %w", err)
 		}
 		clientOptions.Resolver = dcs.Plain(dcs.PlainOptions{Dial: dialer.(proxy.ContextDialer).DialContext})
@@ -221,6 +220,12 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 	app.client = telegram.NewClient(cfg.APIID, cfg.APIHash, clientOptions)
 	if options.Register != nil {
 		options.Register(app)
+	}
+	if options.Configure != nil {
+		if err := options.Configure(app); err != nil {
+			app.Close()
+			return nil, err
+		}
 	}
 	return app, nil
 }
@@ -393,6 +398,9 @@ func (a *App) handle(ctx context.Context, entities tg.Entities, message tg.Messa
 		drop("unaddressable peer")
 		return
 	case !mine:
+		for _, observer := range a.observers {
+			observer(ctx, client, envelope)
+		}
 		// 别人的消息：转发的、编辑过的不算，其余交给借用规则看一眼。
 		if !envelope.Edited && !envelope.Forward && a.OfferForeign(context.WithoutCancel(ctx), client, envelope) {
 			return
@@ -416,6 +424,8 @@ type ForeignListener func(ctx context.Context, client *bot.Client, message *bot.
 
 // OnForeign 登记一个看别人消息的监听者。只能在注册命令时调用；
 // 按登记顺序依次询问，第一个处理了的为准。
+// OnIncoming observes incoming messages independently of delegated command consumption.
+func (a *App) OnIncoming(listener ForeignListener) { a.observers = append(a.observers, listener) }
 func (a *App) OnForeign(listener ForeignListener) {
 	a.foreign = append(a.foreign, listener)
 }
@@ -462,18 +472,49 @@ func (a *App) DispatchMessage(ctx context.Context, message *tg.Message) bool {
 }
 
 // Close 释放锁并把状态刷写到磁盘。
+// OnClose registers process-owned cleanup. It runs at most once.
+func (a *App) OnClose(cleanup func()) {
+	a.closeMu.Lock()
+	if a.closed {
+		a.closeMu.Unlock()
+		cleanup()
+		return
+	}
+	a.cleanup = append(a.cleanup, cleanup)
+	a.closeMu.Unlock()
+}
 func (a *App) Close() error {
+	a.closeMu.Lock()
+	defer a.closeMu.Unlock()
+	if a.closed {
+		return a.closeErr
+	}
+	a.closed = true
+	for i := len(a.cleanup) - 1; i >= 0; i-- {
+		a.cleanup[i]()
+	}
 	if a.state != nil {
-		_ = a.state.Close()
+		a.closeErr = a.state.Close()
 	}
 	if a.lock != nil {
-		return a.lock.Close()
+		a.closeErr = errors.Join(a.closeErr, a.lock.Close())
 	}
-	return nil
+	return a.closeErr
 }
 
 // Run 连接、认证、启动后台任务，然后持续处理更新，直到 ctx 结束。
+func (a *App) RequestRestart() {
+	a.restartRequested.Store(true)
+	if a.shutdown != nil {
+		a.shutdown()
+	}
+}
+func (a *App) RestartRequested() bool { return a.restartRequested.Load() }
 func (a *App) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	a.shutdown = cancel
+	defer func() { cancel(); a.stopCommands(); a.jobs.Wait() }()
+
 	return a.client.Run(ctx, func(ctx context.Context) error {
 		status, err := a.client.Auth().Status(ctx)
 		if err != nil {
@@ -493,7 +534,8 @@ func (a *App) Run(ctx context.Context) error {
 		a.bot.Store(client)
 		a.Logger.Info("runtime.ready", slog.Int64("account", self.ID), slog.Int("commands", len(a.Registry.Commands())), slog.String("version", a.Version))
 		for _, job := range a.Registry.Jobs() {
-			go job(ctx, client)
+			a.jobs.Add(1)
+			go func() { defer a.jobs.Done(); job(ctx, client) }()
 		}
 		if a.options.AfterReady != nil {
 			// 更新引擎在运行，命令才会被分发，所以钩子和它并行运行，

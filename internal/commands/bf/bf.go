@@ -10,15 +10,15 @@ import (
 
 	"github.com/gotd/td/tg"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/backup"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/backup"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // installURL 是恢复说明里让人运行的地址。它直接写在备份文件自己的说明
 // 文字里，因为真正用到它的时候，人在一台全新的机器上，手边没有别的线索。
-const installURL = "https://raw.githubusercontent.com/MiCat-S/mibot-lite/main/scripts/install.sh"
+const installURL = "https://raw.githubusercontent.com/OrionG-hub/laowangbot/main/scripts/install.sh"
 
 // captionFileLimit 让文件列表不超出 Telegram 说明文字的 1024 字符上限；
 // 再多的话，给出总数就够了。
@@ -34,7 +34,7 @@ func backupCaption(version string, names []string, size int) string {
 	for index, name := range listed {
 		quoted[index] = command.Escape(name)
 	}
-	return "📦 <b>mibot-lite 配置备份</b> · " + command.Escape(version) + "\n" +
+	return "📦 <b>laowangbot 配置备份</b> · " + command.Escape(version) + "\n" +
 		strconv.Itoa(len(names)) + " 个文件，" + command.Escape(kit.FormatBytes(size)) + "：" +
 		strings.Join(quoted, "、") + more + "\n\n" +
 		"⚠️ <b>这个文件就是你的账号</b>：里面有登录会话和各命令的 API 密钥。不要转发给任何人。\n\n" +
@@ -51,7 +51,7 @@ func backupHelp(prefix string) string {
 		"<b>不包含</b>\neatgif 素材和测速 CLI 这类缓存，用到时会自己重新下载；也不含程序本身。\n\n" +
 		"<b>恢复</b>\n在新机器上把备份文件传上去，然后运行：\n" +
 		"<code>bash &lt;(curl -fsSL " + installURL + ") --restore 备份文件路径</code>\n" +
-		"已经装好的机器可以用 <code>mibot-lite --restore 文件 --root 部署目录</code>，" +
+		"已经装好的机器可以用 <code>laowangbot --restore 文件 --root 部署目录</code>，" +
 		"要覆盖已有账号得加 <code>--force</code>，并且先停掉服务。\n\n" +
 		"⚠️ 无论在哪个对话里执行，备份都只发到收藏夹，不会出现在当前对话。" +
 		"这个文件等同于你的账号，不要转发给别人——要给别人看问题，用 <code>" + p + "log</code>，那个是脱敏的。"
@@ -74,7 +74,7 @@ func Register(a *app.App) {
 		// 不管命令是在哪个对话里发的，一律发到收藏夹。这个压缩包就等于
 		// 账号本身；只因为有人碰巧在群里敲了 .bf 就把它发进群，等于把
 		// 账号交给了群里所有人。
-		name := "mibot-lite-backup-" + time.Now().Format("20060102-1504") + ".tar.gz"
+		name := "laowangbot-backup-" + time.Now().Format("20060102-1504") + ".tar.gz"
 		if err := inv.Client.SendDocument(ctx, &tg.InputPeerSelf{}, name, "application/gzip", archive,
 			backupCaption(a.Version, names, len(archive)), 0); err != nil {
 			return err

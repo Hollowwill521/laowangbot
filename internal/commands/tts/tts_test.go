@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 func TestCleanText(t *testing.T) {
@@ -135,5 +135,16 @@ func TestHelpMentionsEverySubcommand(t *testing.T) {
 		if !strings.Contains(text, part) {
 			t.Errorf("帮助里没有 %s", part)
 		}
+	}
+}
+
+func TestLaowangEndpointOverridesLegacy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("audio")) }))
+	defer srv.Close()
+	t.Setenv("MIBOT_FISH_ENDPOINT", "http://127.0.0.1:1")
+	t.Setenv("LAOWANGBOT_FISH_ENDPOINT", srv.URL)
+	got, err := synthesize(context.Background(), document{}, "key", "voice", "text")
+	if err != nil || string(got) != "audio" {
+		t.Fatal(string(got), err)
 	}
 }

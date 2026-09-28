@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -45,7 +46,7 @@ func TestUpdatePersists(t *testing.T) {
 	if value.Count != 3 || value.Items["a"] != 1 {
 		t.Fatalf("value did not survive: %+v", value)
 	}
-	if info, err := os.Stat(store.Path()); err != nil || info.Mode().Perm() != 0o600 {
+	if info, err := os.Stat(store.Path()); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("stored document must be owner-only, got %v %v", info.Mode(), err)
 	}
 }

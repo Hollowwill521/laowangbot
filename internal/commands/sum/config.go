@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/ai"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/ai"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
 
 // sumTypes 是服务商接口类型的可选值；auto 表示按模型名自动判断。

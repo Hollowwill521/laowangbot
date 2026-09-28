@@ -3,6 +3,7 @@ package restart
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -13,10 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/store"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/store"
+	"runtime"
 )
 
 // receipt 是能撑过 systemd 重启的记录，让重启回来的进程能编辑
@@ -48,7 +50,9 @@ type restarter struct {
 var service *restarter
 
 // Available 表示重启器已经就绪。
-func Available() bool { return service != nil }
+func Available() bool {
+	return service != nil && (os.Getenv("LAOWANGBOT_SUPERVISED") == "1" || runtime.GOOS == "linux")
+}
 
 // Now 提交重启并把命令消息改成 progress；kind 写进回执，重启回来后据此报告。
 // 调用前先用 Available 确认。
@@ -65,15 +69,15 @@ func systemctl() string {
 
 // Register 注册 .restart 和处理回执的钩子。
 func Register(a *app.App) {
-	r := &restarter{a: a, service: a.Env.Get("MIBOT_SERVICE", "mibot-lite.service"),
+	r := &restarter{a: a, service: a.Env.Get("MIBOT_SERVICE", "laowangbot.service"),
 		store: store.New(filepath.Join(a.Root, "restart-receipt.json"), func() receiptDocument { return receiptDocument{} })}
 	service = r
-	a.Registry.Register(&command.Command{Name: "restart", Description: "重启 systemd 服务", Handle: func(ctx context.Context, inv *command.Invocation) error {
+	a.Registry.Register(&command.Command{Name: "restart", Description: "重启 laowangbot 服务", Handle: func(ctx context.Context, inv *command.Invocation) error {
 		// 重启不收参数；带了参数（.restart help 之类）多半是想看说明，别真的重启。
 		if len(inv.Args) > 0 {
 			return inv.EditText(ctx, "用法："+inv.Prefix+"restart（不带参数）重启服务，重启完成后这条消息会改成「重启成功」")
 		}
-		return r.command(ctx, inv, "restart", "<b>MiBot Lite 重启</b>\n正在提交重启请求…", "服务重启命令执行失败。")
+		return r.command(ctx, inv, "restart", "<b>laowangbot 重启</b>\n正在提交重启请求…", "服务重启命令执行失败。")
 	}})
 	a.Registry.AddJob(r.notifyReady)
 }
@@ -108,6 +112,14 @@ func (r *restarter) command(ctx context.Context, inv *command.Invocation, kind, 
 }
 
 func (r *restarter) trigger(ctx context.Context) error {
+	if os.Getenv("LAOWANGBOT_SUPERVISED") == "1" {
+		go func() { time.Sleep(250 * time.Millisecond); r.a.RequestRestart() }()
+		return nil
+	}
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("start using --supervise to enable restart")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return exec.CommandContext(ctx, systemctl(), "--no-block", "restart", r.service).Run()
@@ -166,12 +178,12 @@ func (r *restarter) notifyReady(ctx context.Context, client *bot.Client) {
 		clear()
 		return
 	}
-	text := "<b>MiBot Lite 重启成功</b>\n服务已就绪"
+	text := "<b>laowangbot 重启成功</b>\n服务已就绪"
 	switch note.Kind {
 	case "update":
-		text = "<b>MiBot Lite 更新完成</b>\n新版本已就绪"
+		text = "<b>laowangbot 更新完成</b>\n新版本已就绪"
 	case "rollback":
-		text = "<b>MiBot Lite 回滚完成</b>\n已换回上一版本"
+		text = "<b>laowangbot 回滚完成</b>\n已换回上一版本"
 	}
 	if err := client.EditMessage(ctx, peer, note.MessageID, text, false); err != nil {
 		client.Logger().Warn("restart.receipt_failed", slog.String("error", err.Error()))

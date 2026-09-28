@@ -1,7 +1,7 @@
 // Package session 把 gramjs/teleproto 的 StringSession（MiBox 的 Node
 // 运行时存在 config.json 里的就是它）转换成 gotd 的会话存储，也能转回去。
 //
-// 目的是让已经在 MiBox 下登录过的账号保住会话：把 mibot-lite 指向同一个
+// 目的是让已经在 MiBox 下登录过的账号保住会话：把 laowangbot 指向同一个
 // 目录，它就能直接连上，不用再要验证码。
 package session
 

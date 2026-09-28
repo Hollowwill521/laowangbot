@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/commands/kit"
-	"github.com/MiCat-S/mibot-lite/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/httpx"
 )
 
 // answerPageLimit 是每页回答可见字符的上限，给续页标签和署名留出余量，
@@ -282,7 +282,7 @@ func telegraphMarkdown(question, answer string, sources []aiSource) string {
 func (s *aiService) publish(ctx context.Context, cfg aiConfig, question, answer string, sources []aiSource) (string, error) {
 	token := cfg.TelegraphToken
 	if token == "" {
-		account, err := s.telegraphPost(ctx, cfg, "createAccount", map[string]any{"short_name": "MiBotAI", "author_name": "MiBot"})
+		account, err := s.telegraphPost(ctx, cfg, "createAccount", map[string]any{"short_name": "laowangbotAI", "author_name": "laowangbot"})
 		if err != nil {
 			return "", err
 		}

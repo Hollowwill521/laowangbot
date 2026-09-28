@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/bot"
 )
 
 // 重启要能掐断卡住的命令：Abort 之后正在跑的命令拿到取消，不回「执行失败」

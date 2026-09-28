@@ -1,0 +1,8 @@
+{
+  "name": "echo",
+  "version": "1.0.0",
+  "protocol_version": 1,
+  "executable": "echo.sh",
+  "commands": ["plugin_hello"],
+  "timeout_seconds": 5
+}

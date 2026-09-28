@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -64,7 +65,7 @@ func TestEnvFileAndPrefixes(t *testing.T) {
 	if env.Get("PATH", "unset") != "unset" {
 		t.Error("only MIBOT_* variables come from the environment")
 	}
-	if got := ReadEnv(t.TempDir(), nil).Prefixes(); len(got) != 3 || got[0] != "." {
+	if got := ReadEnv(t.TempDir(), nil).Prefixes(); len(got) != 4 || got[0] != "." {
 		t.Fatalf("default prefixes %v", got)
 	}
 }
@@ -88,7 +89,7 @@ func TestSetEnvChangesOnlyThatLine(t *testing.T) {
 		t.Errorf("读回来的前缀是 %q", got)
 	}
 	info, _ := os.Stat(filepath.Join(root, ".env"))
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf(".env 权限是 %v，应为 0600", info.Mode().Perm())
 	}
 }
@@ -107,5 +108,18 @@ func TestSetEnvAppendsOrCreates(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(filepath.Join(root, ".env")); string(raw) != "OTHER=1\nMIBOT_PREFIX=$\n" {
 		t.Errorf("追加后的 .env 是 %q", raw)
+	}
+}
+
+func TestLaowangEnvironmentAndComma(t *testing.T) {
+	env := ReadEnv(t.TempDir(), []string{"MIBOT_PREFIX=!", "LAOWANGBOT_PREFIX=， ?", "LAOWANGBOT_SERVICE=custom.service"})
+	if got := strings.Join(env.Prefixes(), " "); got != "， ?" {
+		t.Fatalf("prefixes: %s", got)
+	}
+	if got := env.Get("MIBOT_SERVICE", ""); got != "custom.service" {
+		t.Fatalf("service: %s", got)
+	}
+	if got := strings.Join(ReadEnv(t.TempDir(), nil).Prefixes(), " "); got != ". 。 $ ，" {
+		t.Fatalf("defaults: %s", got)
 	}
 }

@@ -1,0 +1,23 @@
+{
+  "plugins": [
+    {
+      "manifest": {
+        "name": "echo",
+        "version": "1.0.0",
+        "protocol_version": 1,
+        "executable": "echo.sh",
+        "commands": [
+          "plugin_hello"
+        ],
+        "timeout_seconds": 5
+      },
+      "files": [
+        {
+          "path": "echo.sh",
+          "url": "https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/examples/plugins/echo/echo.sh",
+          "sha256": "21795e564e585c64d20581c1ce9c510e8bcdad639e8745b7db6ea7de726eaf16"
+        }
+      ]
+    }
+  ]
+}

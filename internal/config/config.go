@@ -18,7 +18,7 @@ import (
 const MaxConfigBytes = 1 << 20
 
 // DefaultDeviceModel 在 config.json 没有写 app_name 时使用。
-const DefaultDeviceModel = "MiBot Lite"
+const DefaultDeviceModel = "laowangbot"
 
 // Proxy 是连接时可选的 SOCKS5 代理。
 type Proxy struct {
@@ -148,7 +148,7 @@ func ReadEnv(root string, environ []string) Env {
 	}
 	for _, entry := range environ {
 		key, value, ok := strings.Cut(entry, "=")
-		if ok && strings.HasPrefix(key, "MIBOT_") {
+		if ok && (strings.HasPrefix(key, "MIBOT_") || strings.HasPrefix(key, "LAOWANGBOT_")) {
 			env[key] = value
 		}
 	}
@@ -207,14 +207,20 @@ func SetEnv(root, key, value string) error {
 // Prefixes 返回命令前缀：优先用 MIBOT_PREFIX（以空格分隔），
 // 没有设置就用 MiBox 的默认值。
 func (e Env) Prefixes() []string {
-	if configured := strings.Fields(e["MIBOT_PREFIX"]); len(configured) > 0 {
+	if configured := strings.Fields(e.Get("MIBOT_PREFIX", "")); len(configured) > 0 {
 		return configured
 	}
-	return []string{".", "。", "$"}
+	return []string{".", "。", "$", "，"}
 }
 
 // Get 返回某项设置，没有设置就返回默认值。
 func (e Env) Get(key, fallback string) string {
+	if strings.HasPrefix(key, "MIBOT_") {
+		if v, ok := e["LAOWANGBOT_"+strings.TrimPrefix(key, "MIBOT_")]; ok {
+			return strings.TrimSpace(v)
+		}
+	}
+
 	if value := strings.TrimSpace(e[key]); value != "" {
 		return value
 	}

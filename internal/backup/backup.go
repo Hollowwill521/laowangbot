@@ -29,13 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiCat-S/mibot-lite/internal/config"
+	"github.com/OrionG-hub/laowangbot/internal/config"
 )
 
 const (
 	// Manifest 是每个归档的第一项。没有它的归档，Restore 一律拒绝：
 	// 一个碰巧含有 config.json 的 tar 包，不能拿来覆盖一个账号。
-	Manifest = "mibot-lite-backup.json"
+	Manifest = "laowangbot-backup.json"
 	format   = 1
 
 	// Restore 读取量的上限。真实的备份只有几十 KB；设这些上限，
@@ -68,6 +68,9 @@ type manifest struct {
 // Create 把 root 下的配置打包，返回 gzip 压缩的 tar 包，以及其中包含的
 // 文件名（不算清单文件）。
 func Create(root, version string, now time.Time) ([]byte, []string, error) {
+	if err := checkDataDirectory(root); err != nil {
+		return nil, nil, err
+	}
 	var names []string
 	for _, name := range rootFiles {
 		if regular(filepath.Join(root, name)) {
@@ -160,7 +163,7 @@ func allowed(name string) bool {
 func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 	zipped, err := gzip.NewReader(archive)
 	if err != nil {
-		return nil, errors.New("not a mibot-lite backup: the file is not gzip")
+		return nil, errors.New("not a laowangbot/mibot-lite backup: the file is not gzip")
 	}
 	defer zipped.Close()
 	limited := &io.LimitedReader{R: zipped, N: maxTotal + 1}
@@ -189,7 +192,7 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 		if limited.N <= 0 {
 			return nil, errors.New("the backup is larger than any configuration could be")
 		}
-		if header.Name == Manifest {
+		if header.Name == Manifest || header.Name == "mibot-lite-backup.json" {
 			head = new(manifest)
 			if err := json.Unmarshal(body, head); err != nil {
 				return nil, errors.New("the backup's manifest is unreadable")
@@ -197,7 +200,7 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 			continue
 		}
 		if !allowed(header.Name) {
-			return nil, fmt.Errorf("the backup contains %q, which a mibot-lite backup never holds", header.Name)
+			return nil, fmt.Errorf("the backup contains %q, which a laowangbot/mibot-lite backup never holds", header.Name)
 		}
 		if _, seen := files[header.Name]; seen {
 			return nil, fmt.Errorf("the backup contains %q twice", header.Name)
@@ -205,10 +208,10 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 		files[header.Name] = body
 	}
 	if head == nil {
-		return nil, errors.New("not a mibot-lite backup: it has no " + Manifest)
+		return nil, errors.New("not a laowangbot/mibot-lite backup: it has no " + Manifest)
 	}
 	if head.Format > format {
-		return nil, fmt.Errorf("this backup was made by a newer mibot-lite (format %d); upgrade first", head.Format)
+		return nil, fmt.Errorf("this backup was made by a newer laowangbot (format %d); upgrade first", head.Format)
 	}
 	if len(files) == 0 {
 		return nil, errors.New("the backup is empty")
@@ -222,6 +225,9 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 		return nil, ErrExists
 	}
 
+	if err := checkDataDirectory(root); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Join(root, "data"), 0o700); err != nil {
 		return nil, err
 	}
@@ -263,4 +269,19 @@ func writeAtomic(target string, body []byte) error {
 		return err
 	}
 	return os.Rename(temporary.Name(), target)
+}
+
+// Do not follow a pre-existing data link while reading or restoring account secrets.
+func checkDataDirectory(root string) error {
+	info, err := os.Lstat(filepath.Join(root, "data"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("data must be a real directory, not a link")
+	}
+	return nil
 }

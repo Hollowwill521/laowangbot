@@ -9,9 +9,9 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/MiCat-S/mibot-lite/internal/app"
-	"github.com/MiCat-S/mibot-lite/internal/command"
-	"github.com/MiCat-S/mibot-lite/internal/config"
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
+	"github.com/OrionG-hub/laowangbot/internal/config"
 )
 
 // prefixLimit 是单个前缀最多几个字符。前缀是每条命令都要打的，太长没有意义。
@@ -123,12 +123,12 @@ func Register(a *app.App) {
 		a.Registry.SetPrefixes(next)
 
 		note := "已写入 .env，重启后仍然有效"
-		if err := config.SetEnv(a.Root, "MIBOT_PREFIX", strings.Join(next, " ")); err != nil {
+		if err := config.SetEnv(a.Root, "LAOWANGBOT_PREFIX", strings.Join(next, " ")); err != nil {
 			inv.Log.Error("prefix.persist_failed", "error", err.Error())
 			note = "⚠️ 写入 .env 失败，只在本次运行里生效"
-		} else if value, set := os.LookupEnv("MIBOT_PREFIX"); set && value != "" {
+		} else if value, set := os.LookupEnv("LAOWANGBOT_PREFIX"); set && value != "" {
 			// 进程环境变量里的 MIBOT_* 会盖过 .env，重启后生效的会是它。
-			note = "⚠️ 已写入 .env，但服务的环境变量里也设了 MIBOT_PREFIX，重启后会以那个为准"
+			note = "⚠️ 已写入 .env，但服务的环境变量里也设了 LAOWANGBOT_PREFIX，重启后会以那个为准"
 		}
 		return inv.Edit(ctx, "✅ 前缀已改为："+quotePrefixes(next)+"\n<i>"+command.Escape(note)+"</i>\n\n以后这样用："+
 			command.Code(next[0]+"help"))
