@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -24,8 +25,9 @@ type Catalog struct {
 	Plugins []CatalogEntry `json:"plugins"`
 }
 type CatalogEntry struct {
-	Manifest Manifest     `json:"manifest"`
-	Files    []RemoteFile `json:"files"`
+	Manifest  Manifest            `json:"manifest"`
+	Files     []RemoteFile        `json:"files,omitempty"`
+	Platforms map[string]Platform `json:"platforms,omitempty"`
 }
 type RemoteFile struct {
 	Path   string `json:"path"`
@@ -33,9 +35,34 @@ type RemoteFile struct {
 	SHA256 string `json:"sha256"`
 }
 
+type Platform struct {
+	Executable string       `json:"executable"`
+	Files      []RemoteFile `json:"files"`
+}
+
+func (e CatalogEntry) ForPlatform(osName, arch string) (CatalogEntry, error) {
+	if len(e.Platforms) == 0 {
+		return e, nil
+	}
+	p, ok := e.Platforms[osName+"/"+arch]
+	if !ok {
+		return e, fmt.Errorf("plugin %s unavailable for %s/%s", e.Manifest.Name, osName, arch)
+	}
+	e.Manifest.Executable = p.Executable
+	e.Files = p.Files
+	return e, nil
+}
 func trustedURL(raw string) bool {
 	u, e := url.Parse(raw)
-	return e == nil && u.Scheme == "https" && u.Host == "raw.githubusercontent.com" && u.User == nil && !strings.Contains(u.Path, "\\") && strings.HasPrefix(path.Clean(u.Path), "/OrionG-hub/laowangbot/")
+	if e != nil || u.Scheme != "https" || u.User != nil || strings.Contains(u.Path, "\\") {
+		return false
+	}
+	clean := path.Clean(u.Path)
+	return (u.Host == "raw.githubusercontent.com" && strings.HasPrefix(clean, "/OrionG-hub/laowangbot/")) || (u.Host == "github.com" && strings.HasPrefix(clean, "/OrionG-hub/laowangbot/releases/download/"))
+}
+func releaseRedirect(raw string) bool {
+	u, e := url.Parse(raw)
+	return e == nil && u.Scheme == "https" && u.Host == "release-assets.githubusercontent.com" && u.User == nil
 }
 func download(ctx context.Context, c *http.Client, raw string, max int64, restricted bool) ([]byte, error) {
 	if restricted && !trustedURL(raw) {
@@ -47,7 +74,7 @@ func download(ctx context.Context, c *http.Client, raw string, max int64, restri
 		if len(via) >= 5 {
 			return errors.New("too many redirects")
 		}
-		if restricted && !trustedURL(req.URL.String()) {
+		if restricted && !trustedURL(req.URL.String()) && !(strings.HasPrefix(raw, "https://github.com/OrionG-hub/laowangbot/releases/download/") && releaseRedirect(req.URL.String())) {
 			return errors.New("redirect outside current project")
 		}
 		if previous != nil {
@@ -111,6 +138,11 @@ func (m Manager) installRemoteForce(ctx context.Context, client *http.Client, ca
 	if entry == nil {
 		return errors.New("plugin absent from current project catalog")
 	}
+	selected, err := entry.ForPlatform(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return err
+	}
+	entry = &selected
 	if e = validate(entry.Manifest); e != nil {
 		return e
 	}
@@ -133,7 +165,7 @@ func (m Manager) installRemoteForce(ctx context.Context, client *http.Client, ca
 		if e != nil || len(expected) != 32 {
 			return errors.New("invalid sha256")
 		}
-		data, e := download(ctx, client, file.URL, 16<<20, restricted)
+		data, e := download(ctx, client, file.URL, 32<<20, restricted)
 		if e != nil {
 			return e
 		}

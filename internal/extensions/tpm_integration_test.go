@@ -4,6 +4,7 @@ package extensions
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,21 @@ func TestTPMLocalPackageLifecycle(t *testing.T) {
 	ctx := context.Background()
 	a := fixture(t, []string{"hello"})
 	defer a.Close()
+	raw, err := json.Marshal(staticEntries([]string{"hello"})[0].Manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(a.Root, "plugins", "demo")
+	if err = os.WriteFile(filepath.Join(dir, "manifest.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(filepath.Join(dir, "run")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "plugin.go"), []byte("package demo\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	m := plugin.Manager{Root: a.Root}
 	state := filepath.Join(a.Root, "state/demo")
 	if e := os.MkdirAll(state, 0700); e != nil {
@@ -51,7 +67,7 @@ func TestTPMLocalPackageLifecycle(t *testing.T) {
 	if e = Register(a); e != nil {
 		t.Fatal(e)
 	}
-	if _, ok := a.Registry.Lookup("hello"); !ok {
-		t.Fatal("imported command unavailable")
+	if _, ok := a.Registry.Lookup("hello"); ok {
+		t.Fatal("disk import changed compiled runtime")
 	}
 }

@@ -2,9 +2,9 @@
 
 [简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
-**Go 核心 · 獨立程序外掛 · 可遷移的 Telegram UserBot**
+**Go 核心 · 編譯內建原始碼外掛 · 可遷移的 Telegram UserBot**
 
-laowangbot 保留既有內建指令，並加入獨立程序擴充；核心不需要 Node.js。外掛自行提供語言執行環境，部分媒體功能按需使用 ffmpeg。
+laowangbot 保留既有內建指令；核心不需要 Node.js。外掛以 Go 原始碼分發，安裝時編譯進主程式；部分媒體功能按需使用 ffmpeg。
 
 ## 目前狀態
 
@@ -14,7 +14,7 @@ laowangbot 保留既有內建指令，並加入獨立程序擴充；核心不需
 
 ### 一鍵部署
 
-不需安裝 Go 或 Node.js。安裝器下載最新官方 Release、校驗 SHA-256，互動登入後啟動背景工作。Release 必須包含對應平台執行檔與 `checksums.txt`；尚未發布時請使用下方原始碼方式。
+首次安裝及執行官方二進位檔不需 Go 或 Node.js；管理原始碼外掛及原始碼升級需要 Go 和 Git。安裝器下載最新官方 Release、校驗 SHA-256，互動登入後啟動背景工作。Release 必須包含對應平台執行檔與 `checksums.txt`；尚未發布時請使用下方原始碼方式。
 
 ```sh
 # Linux
@@ -100,6 +100,8 @@ go vet ./...
 源自 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) 的 `dbc404a2323061c4abd7f13088622e1d045153fa`，本機分支為 `refactor/laowangbot`。保留原作者歸屬與 [LGPL-2.1](LICENSE)。Noto Sans SC 字型子集依 [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) 發布。
 
 ## 外掛管理（TPM）
+
+外掛安裝、更新及移除會重新編譯主程式，需要 Go 和 Git。Windows 尚不支援自動建置替換，需外部建置後停止服務，手動替換二進位檔及相符的原始碼快照。
 
 `.tpm s 關鍵詞` 搜尋，`.tpm ls -v` 查看詳情，`.tpm i 名稱1 名稱2` 或 `.tpm i all` 安裝，`.tpm update` 批次更新，`.tpm rm 名稱` 解除安裝，`.tpm ul 名稱` 匯出 ZIP。回覆已適配的 ZIP 檔案並傳送 `.tpm i` 可手動安裝。遠端來源固定為本專案；手動外掛不自動更新，本機修改預設受保護，變更於重新啟動後生效。詳見[完整用法](docs/plugins.md#tpm-命令)。
 

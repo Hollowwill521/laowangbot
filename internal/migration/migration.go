@@ -126,6 +126,11 @@ func Run(o Options) (*Report, error) {
 			return nil, e
 		}
 	}
+	for _, name := range []string{"monitor/monitor.json", "qdsg/signin_config.json"} {
+		if e = copyOptional(filepath.Join(stage, "legacy/assets"), stage, name, "state/"+name, r); e != nil {
+			return nil, e
+		}
+	}
 	if o.Convert != nil && (kind == "mibox" || kind == "telebox") {
 		var log bytes.Buffer
 		if e = o.Convert(filepath.Join(stage, "legacy"), filepath.Join(stage, "data"), &log); e != nil {

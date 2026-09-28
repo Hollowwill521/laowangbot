@@ -387,6 +387,11 @@ func (a *App) handle(ctx context.Context, entities tg.Entities, message tg.Messa
 		}
 		a.Logger.Debug("dispatch.skipped", slog.String("reason", reason), slog.Int("message", plain.ID))
 	}
+	if converted && !sentBeforeStart(plain.Date, a.Started) {
+		for _, observer := range a.observers {
+			observer(ctx, client, envelope)
+		}
+	}
 	switch {
 	case edited:
 		drop("edited")
@@ -398,9 +403,6 @@ func (a *App) handle(ctx context.Context, entities tg.Entities, message tg.Messa
 		drop("unaddressable peer")
 		return
 	case !mine:
-		for _, observer := range a.observers {
-			observer(ctx, client, envelope)
-		}
 		// 别人的消息：转发的、编辑过的不算，其余交给借用规则看一眼。
 		if !envelope.Edited && !envelope.Forward && a.OfferForeign(context.WithoutCancel(ctx), client, envelope) {
 			return

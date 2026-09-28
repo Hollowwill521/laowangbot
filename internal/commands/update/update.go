@@ -1,13 +1,12 @@
-// Package update 实现 .update：从 GitHub Releases 检查、安装和回滚版本。
+// Package update checks release tags and rebuilds the host with installed sources.
 package update
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/OrionG-hub/laowangbot/internal/sourceplugin"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,11 +19,6 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
 	"github.com/OrionG-hub/laowangbot/internal/httpx"
 )
-
-// 从 GitHub Releases 自更新：release 里必须有名为 laowangbot-<os>-<arch>
-// 的文件，以及每行都是 "<sha256>  <name>" 的 checksums.txt。下载的文件
-// 通过校验、新二进制也证明了自己能读取这个部署（--check）之前，
-// 磁盘上什么都不改。
 
 type release struct {
 	TagName string `json:"tag_name"`
@@ -39,10 +33,10 @@ type release struct {
 // Register 注册 .update。
 func Register(a *app.App) {
 	repo := a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
-	a.Registry.Register(&command.Command{Name: "update", Description: "检查并更新程序", Usage: "[check|run|rollback]", Timeout: 10 * time.Minute,
+	a.Registry.Register(&command.Command{Name: "update", Description: "检查版本，保留插件源码编译更新", Usage: "[check|run|rollback]", Timeout: 30 * time.Minute,
 		Help: func(prefix string) string {
 			return "<b>程序更新</b>\n" + command.Code(prefix+"update") + " 当前版本与回滚状态\n" + command.Code(prefix+"update check") + " 读取 GitHub Releases 检查新版本\n" +
-				command.Code(prefix+"update run") + " 下载、校验、试跑、替换并重启\n" + command.Code(prefix+"update rollback") + " 换回上一版本并重启\n发布仓库由 " + command.Code("MIBOT_UPDATE_REPO") + " 指定。"
+				command.Code(prefix+"update run") + " 获取发布标签源码，携带本地插件编译、检查、替换并重启\n" + command.Code(prefix+"update rollback") + " 恢复上次构建的程序和插件源码并重启（状态数据不回退）\n发布仓库由 " + command.Code("MIBOT_UPDATE_REPO") + " 指定。\n需要 Go（满足新版 go.mod）和 Git，以及源码/依赖下载网络；不依赖 Node.js。手动插件源码与版本原样保留，远程插件也不会随主程序更新自动升级。编译或检查失败保留当前程序。插件更新请用 tpm update；手动插件用 tpm replace。首次可用 LAOWANGBOT_SOURCE 指定本地源码进行插件编译。Windows 暂不支持源码自编译替换，请外部构建后停止服务手动替换。"
 		},
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
 			binary, err := os.Executable()
@@ -60,7 +54,7 @@ func Register(a *app.App) {
 			switch strings.ToLower(inv.Arg(0)) {
 			case "", "ver", "status":
 				rows := []string{"<b>更新状态</b>", "当前版本：" + command.Code(kit.Version(a)), "程序文件：" + command.Code(binary), "发布仓库：" + command.Code(repo)}
-				if info, err := os.Stat(binary + ".previous"); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+				if info, err := os.Stat(filepath.Join(a.Root, ".compiled", "previous", "binary")); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
 					rows = append(rows, "可回滚到上一版本："+command.Code(inv.Prefix+"update rollback"))
 				} else {
 					rows = append(rows, "暂无可回滚的上一版本")
@@ -88,29 +82,20 @@ func Register(a *app.App) {
 				return inv.Edit(ctx, text)
 			case "run", "apply":
 				if runtime.GOOS == "windows" {
-					return inv.EditText(ctx, "Windows 请停止 laowangbot 后重跑 install.ps1 更新；运行中的 exe 无法安全替换。")
+					return inv.EditText(ctx, "Windows 暂不支持运行中的源码编译替换；请在构建机带上插件源码编译，停止服务后手动替换，勿用官方二进制覆盖本地插件。")
 				}
 				return runUpdate(ctx, a, inv, repo, binary)
 			case "rollback":
 				if runtime.GOOS == "windows" {
-					return inv.EditText(ctx, "Windows 请停止 laowangbot 后使用 install.ps1 -Rollback 回滚。")
-				}
-				previous := binary + ".previous"
-				if info, err := os.Stat(previous); err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
-					return inv.EditText(ctx, "暂无可回滚的上一版本")
+					return inv.EditText(ctx, "Windows 请停止服务后手动恢复程序与对应插件源码备份。")
 				}
 				if !restart.Available() {
 					return inv.EditText(ctx, "重启组件不可用")
 				}
-				swap := binary + ".rollback"
-				if err := os.Rename(binary, swap); err != nil {
+				builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Repo: repo}
+				if err := builder.Rollback(ctx); err != nil {
 					return err
 				}
-				if err := os.Rename(previous, binary); err != nil {
-					_ = os.Rename(swap, binary)
-					return err
-				}
-				_ = os.Rename(swap, previous)
 				return restart.Now(ctx, inv, "rollback", "<b>laowangbot 回滚</b>\n已换回上一版本，正在重启…", "回滚后重启失败。")
 			}
 			return inv.EditText(ctx, "用法："+inv.Prefix+"update [check|run|rollback]")
@@ -155,88 +140,30 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 	if !restart.Available() {
 		return inv.EditText(ctx, "重启组件不可用")
 	}
-	progress := func(text string) error { return inv.Edit(ctx, "<b>laowangbot 更新</b>\n"+text) }
-	if err := progress("正在读取发布信息…"); err != nil {
+	if err := inv.EditText(ctx, "正在读取发布信息…"); err != nil {
 		return err
 	}
 	latest, err := fetchRelease(ctx, repo)
 	if err != nil {
-		return inv.Edit(ctx, "<b>更新失败</b>\n"+command.Escape(httpx.Reason(err))+"\n当前运行的版本未被改动。")
+		return err
 	}
 	if !newer(a.Version, latest.TagName) {
-		return inv.Edit(ctx, "<b>已是最新版本</b>\n当前："+command.Code(kit.Version(a)))
+		return inv.EditText(ctx, "已是最新版本："+kit.Version(a))
 	}
-	assetName := "laowangbot-" + runtime.GOOS + "-" + runtime.GOARCH
-	var assetURL, sumsURL string
-	var assetSize int64
-	for _, asset := range latest.Assets {
-		switch asset.Name {
-		case assetName:
-			assetURL, assetSize = asset.URL, asset.Size
-		case "checksums.txt", "SHA256SUMS":
-			sumsURL = asset.URL
-		}
-	}
-	if assetURL == "" {
-		return inv.Edit(ctx, "<b>更新失败</b>\n发布 "+command.Code(latest.TagName)+" 没有 "+command.Code(assetName)+" 构建。\n当前运行的版本未被改动。")
-	}
-	if sumsURL == "" {
-		return inv.Edit(ctx, "<b>更新失败</b>\n发布缺少 checksums.txt，拒绝安装未校验的二进制。\n当前运行的版本未被改动。")
-	}
-	if err := progress("正在下载 " + command.Code(latest.TagName) + fmt.Sprintf("（%.1f MB）…", float64(assetSize)/(1<<20))); err != nil {
+	if err = inv.EditText(ctx, "正在获取 "+latest.TagName+" 源码，保留已安装插件并编译主程序；首次编译可能较慢…"); err != nil {
 		return err
 	}
-	sums, err := httpx.Do(ctx, httpx.Request{URL: sumsURL, Timeout: 30 * time.Second, MaxBytes: 64 << 10})
-	if err != nil || !sums.OK() {
-		return inv.Edit(ctx, "<b>更新失败</b>\n无法读取校验文件。\n当前运行的版本未被改动。")
+	builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Repo: repo}
+	if err = builder.Update(ctx, latest.TagName); err != nil {
+		return inv.EditText(ctx, buildFailure(err))
 	}
-	expected := ""
-	for _, line := range strings.Split(string(sums.Body), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && strings.TrimPrefix(fields[len(fields)-1], "*") == assetName {
-			expected = strings.ToLower(fields[0])
-		}
+	return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已编译安装 "+command.Escape(latest.TagName)+"，本地插件源码已保留，正在重启…", "更新后重启失败，请手动重启服务。")
+}
+
+func buildFailure(err error) string {
+	detail := []rune(err.Error())
+	if len(detail) > 1800 {
+		detail = append(detail[:1800], []rune("…（诊断已截断）")...)
 	}
-	if len(expected) != 64 {
-		return inv.Edit(ctx, "<b>更新失败</b>\n校验文件里没有 "+command.Code(assetName)+" 的哈希。\n当前运行的版本未被改动。")
-	}
-	candidate := binary + ".download"
-	digest, err := kit.Download(ctx, assetURL, candidate, 200<<20)
-	if err != nil {
-		os.Remove(candidate)
-		return inv.Edit(ctx, "<b>更新失败</b>\n下载失败："+command.Escape(httpx.Reason(err))+"\n当前运行的版本未被改动。")
-	}
-	if digest != expected {
-		os.Remove(candidate)
-		return inv.Edit(ctx, "<b>更新失败</b>\nSHA-256 不匹配，已丢弃下载。\n当前运行的版本未被改动。")
-	}
-	if err := os.Chmod(candidate, 0o755); err != nil {
-		os.Remove(candidate)
-		return err
-	}
-	if err := progress("校验通过，正在试跑新版本…"); err != nil {
-		return err
-	}
-	checkCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	output, err := exec.CommandContext(checkCtx, candidate, "--check", "--root", a.Root).CombinedOutput()
-	cancel()
-	if err != nil {
-		os.Remove(candidate)
-		tail := strings.TrimSpace(string(output))
-		if len(tail) > 400 {
-			tail = tail[len(tail)-400:]
-		}
-		return inv.Edit(ctx, "<b>更新失败</b>\n新版本无法读取当前部署，已丢弃。\n<pre>"+command.Escape(tail)+"</pre>\n当前运行的版本未被改动。")
-	}
-	previous := binary + ".previous"
-	os.Remove(previous)
-	if err := os.Rename(binary, previous); err != nil {
-		os.Remove(candidate)
-		return err
-	}
-	if err := os.Rename(candidate, binary); err != nil {
-		_ = os.Rename(previous, binary)
-		return err
-	}
-	return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已安装 "+command.Code(latest.TagName)+"，正在重启…", "更新后重启失败，可手动重启服务。")
+	return "源码更新失败：" + string(detail) + "\n请检查编译环境或插件兼容性；若提示恢复失败，请先保留 .compiled/pending 并修复磁盘问题。"
 }

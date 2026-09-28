@@ -8,7 +8,7 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 out=${1:-$root/laowangbot}
-version=${LAOWANGBOT_VERSION:-${MIBOT_VERSION:-$(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo dev)}}
+version=${LAOWANGBOT_VERSION:-${MIBOT_VERSION:-$(cat "$root/VERSION")}}
 
 cd "$root"
 CGO_ENABLED=${CGO_ENABLED:-0} go build -trimpath \

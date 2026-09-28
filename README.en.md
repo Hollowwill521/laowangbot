@@ -2,9 +2,9 @@
 
 [简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
-**Go core · Independent process plugins · Migratable Telegram UserBot**
+**Go core · Compiled-in Go source plugins · Migratable Telegram UserBot**
 
-laowangbot keeps the existing built-in commands and adds process-based extensions without requiring Node.js in the core. Plugins supply their own language runtimes; media features use ffmpeg when needed.
+laowangbot keeps the existing built-in commands without requiring Node.js in the core. Plugins ship as Go source and compile into the host during installation; media features use ffmpeg when needed.
 
 ## Status
 
@@ -14,7 +14,7 @@ The project is published at `github.com/OrionG-hub/laowangbot`. Official Release
 
 ### One-command installation
 
-No Go or Node.js is required. The installer downloads the latest official Release, verifies SHA-256, prompts for login and starts a background task. The Release must contain the platform binary and `checksums.txt`; use the source workflow below until these assets are published.
+Installing and running the official binary requires neither Go nor Node.js. Source plugin management and source upgrades require Go and Git. The installer downloads the latest official Release, verifies SHA-256, prompts for login and starts a background task. The Release must contain the platform binary and `checksums.txt`; use the source workflow below until these assets are published.
 
 ```sh
 # Linux
@@ -100,6 +100,8 @@ Run unit tests, integration tests and coverage checks as shown below. CI definit
 Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit `dbc404a2323061c4abd7f13088622e1d045153fa`, on local branch `refactor/laowangbot`. Original attribution and [LGPL-2.1](LICENSE) are retained. The Noto Sans SC subset uses [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt).
 
 ## Plugin manager (TPM)
+
+Installing, updating or removing plugins rebuilds the host and requires Go and Git. Windows does not support automatic source rebuilding and replacement; build externally, stop the service, then manually replace the binary and its matching source snapshot.
 
 Use `.tpm s keyword` to search, `.tpm ls -v` for details, `.tpm i name1 name2` or `.tpm i all` to install, `.tpm update` to update remote plugins, `.tpm rm name` to uninstall, and `.tpm ul name` to export ZIP. Reply to an adapted ZIP package with `.tpm i` to install manually. The source stays fixed to this project. Manual plugins are never remotely updated, local changes are protected by default, and changes take effect after restart. See the [TPM guide](docs/plugins.md#tpm-命令).
 

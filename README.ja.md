@@ -2,9 +2,9 @@
 
 [简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
-**Go コア · 独立プロセスのプラグイン · 移行対応 Telegram UserBot**
+**Go コア · Go ソースを組み込むプラグイン · 移行対応 Telegram UserBot**
 
-laowangbot は既存の組み込みコマンドを維持し、別プロセスで動く拡張機能を追加します。コアに Node.js は不要です。プラグインの言語ランタイムは個別に用意し、一部のメディア機能は ffmpeg を使用します。
+laowangbot は既存の組み込みコマンドを維持し、コアに Node.js は不要です。プラグインは Go ソースで配布し、導入時に本体へコンパイルします。一部のメディア機能は ffmpeg を使用します。
 
 ## 現在の状態
 
@@ -14,7 +14,7 @@ laowangbot は既存の組み込みコマンドを維持し、別プロセスで
 
 ### ワンコマンド導入
 
-Go や Node.js は不要です。インストーラーが最新の公式 Release を取得して SHA-256 を検証し、対話式ログイン後にバックグラウンドタスクを開始します。対応バイナリと `checksums.txt` の公開が必要です。未公開時は下のソースからの手順を使ってください。
+公式バイナリの初回導入と実行に Go や Node.js は不要です。ソースプラグインの管理とソース更新には Go と Git が必要です。インストーラーが最新の公式 Release を取得して SHA-256 を検証し、対話式ログイン後にバックグラウンドタスクを開始します。対応バイナリと `checksums.txt` の公開が必要です。未公開時は下のソースからの手順を使ってください。
 
 ```sh
 # Linux
@@ -100,6 +100,8 @@ go vet ./...
 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) の `dbc404a2323061c4abd7f13088622e1d045153fa` を起点とし、ローカルブランチは `refactor/laowangbot` です。元の著作者表示と [LGPL-2.1](LICENSE) を維持します。Noto Sans SC のサブセットは [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) で配布されます。
 
 ## プラグイン管理（TPM）
+
+プラグインの導入・更新・削除は本体を再ビルドするため、Go と Git が必要です。Windows の自動ビルド置換は未対応です。外部でビルドし、サービス停止後にバイナリと対応するソーススナップショットを手動で置き換えてください。
 
 `.tpm s キーワード` で検索、`.tpm ls -v` で詳細表示、`.tpm i 名前1 名前2` または `.tpm i all` でインストール、`.tpm update` で一括更新、`.tpm rm 名前` で削除、`.tpm ul 名前` で ZIP を出力します。対応済み ZIP に返信して `.tpm i` を送ると手動導入できます。配布元は本プロジェクトに固定し、手動プラグインは自動更新しません。ローカル変更は既定で保護され、変更は再起動後に反映されます。[詳細](docs/plugins.md#tpm-命令)。
 

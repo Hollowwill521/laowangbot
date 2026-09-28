@@ -3,6 +3,7 @@ package extensions
 import (
 	"context"
 	"errors"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
 	"strings"
 	"testing"
@@ -160,5 +161,21 @@ func TestTPMBrokenManifestDoesNotBlockBatch(t *testing.T) {
 	r, e = executeTPM(context.Background(), m, []string{"ua", "-f"}, nil)
 	if e != nil || strings.Join(m.calls, ",") != "force:broken,force:healthy" || !strings.Contains(r.Text, "成功 2") {
 		t.Fatal(r, e, m.calls)
+	}
+}
+
+func TestTPMUpdateBuiltinsAndUnknownHaveDistinctGuidance(t *testing.T) {
+	a := fixture(t, nil)
+	a.Registry.Register(&command.Command{Name: "yvlu"})
+	m := &memoryTPM{}
+	managed := managedTPM{tpmManager: m, registry: a.Registry}
+	if e := managed.UpdateRemoteForce(t.Context(), "yvlu", false); e == nil || !strings.Contains(e.Error(), "update run") {
+		t.Fatal(e)
+	}
+	if e := managed.UpdateRemoteForce(t.Context(), "missing", false); e == nil || !strings.Contains(e.Error(), "未安装") {
+		t.Fatal(e)
+	}
+	if len(m.calls) != 0 {
+		t.Fatal(m.calls)
 	}
 }

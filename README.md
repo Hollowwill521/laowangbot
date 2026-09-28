@@ -2,9 +2,9 @@
 
 [简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
-**Go 核心 · 独立进程插件 · 可迁移的 Telegram UserBot**
+**Go 核心 · 编译内置源码插件 · 可迁移的 Telegram UserBot**
 
-保留原有内建命令，核心无需 Node.js；按需启动媒体工具与扩展进程，配置和命令状态存为本地 JSON。插件可用 Go、Python 等语言实现，各插件自行声明运行依赖。
+保留原有内建命令，核心无需 Node.js；按需启动媒体工具，配置和命令状态存为本地 JSON。插件以 Go 源码分发，安装时编译进宿主；附加功能仍可能需要自行配置运行依赖。
 
 项目发布于 `github.com/OrionG-hub/laowangbot`。官方 Release 提供各平台构件和校验文件；Docker 镜像暂未发布，容器请从源码本地构建。
 
@@ -12,7 +12,7 @@
 
 ### 一键部署
 
-无需安装 Go 或 Node.js。安装器下载最新官方 Release 并校验 SHA-256，交互登录后启动后台任务。命令要求 Release 已包含对应平台构件与 `checksums.txt`；尚未发布时请使用下面的源码方式。
+首次安装和运行官方二进制无需 Go 或 Node.js；管理源码插件及源码升级需要 Go 和 Git。安装器下载最新官方 Release 并校验 SHA-256，交互登录后启动后台任务。命令要求 Release 已包含对应平台构件与 `checksums.txt`；尚未发布时请使用下面的源码方式。
 
 ```sh
 # Linux
@@ -103,6 +103,8 @@ bash scripts/build.sh
 状态卡片字体来自 Noto Sans SC，按 [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) 分发。
 
 ## 插件管理（TPM）
+
+插件安装、更新和卸载会重新编译宿主，需要 Go 和 Git。Windows 暂不支持自动构建替换，需外部构建后停止服务，手动替换二进制及匹配的源码快照。
 
 `.tpm s 关键词` 搜索，`.tpm ls -v` 查看详情，`.tpm i 名称1 名称2` 或 `.tpm i all` 安装，`.tpm update` 批量更新，`.tpm rm 名称` 卸载，`.tpm ul 名称` 导出 ZIP。回复适配后的 ZIP 文件发送 `.tpm i` 可手动安装。远程源固定为本项目；手动插件不自动更新，本地修改默认受保护，变更重启后生效。见[完整用法](docs/plugins.md#tpm-命令)。
 

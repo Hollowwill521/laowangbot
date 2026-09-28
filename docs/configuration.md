@@ -10,7 +10,7 @@
 | `gotd-session.json` | Go 客户端会话状态 |
 | `.env` | 可选环境设置 |
 | `data/` | 内建命令 JSON 状态 |
-| `plugins/` | 已安装独立进程插件 |
+| `plugins/` | 已安装 Go 插件源码 |
 | `state/<插件名>/` | 插件持久状态，更新代码时保留 |
 | `legacy/` | 迁移归档的旧插件源码、资源与数据库 |
 | `migration-report.json` | 迁移文件、插件映射、转换日志与警告 |

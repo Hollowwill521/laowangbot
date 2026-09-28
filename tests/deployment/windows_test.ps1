@@ -45,5 +45,33 @@ func main(){
     if (!(Test-Path (Join-Path $wizardRoot 'config.json'))) { throw 'Wizard did not migrate configuration' }
     if ((Get-Content (Join-Path $wizardRoot 'config.json') -Raw) -ne (Get-Content (Join-Path $source 'config.json') -Raw)) { throw 'Wizard changed source configuration' }
   } finally { Remove-Item Function:\Read-Host; Remove-Variable MigrationAnswers -Scope Global }
+  foreach ($kind in @('visible','hidden','compiled')) {
+    $guarded = Join-Path $work ('guard-' + $kind)
+    New-Item -ItemType Directory $guarded | Out-Null
+    Copy-Item $fixture (Join-Path $guarded 'laowangbot.exe')
+    if ($kind -eq 'compiled') {
+      New-Item -ItemType Directory (Join-Path $guarded '.compiled') | Out-Null
+      Set-Content (Join-Path $guarded '.compiled/current.json') '{}'
+    } else {
+      New-Item -ItemType Directory (Join-Path $guarded 'plugins') | Out-Null
+      $marker = Join-Path $guarded 'plugins/package'
+      Set-Content $marker 'source'
+      if ($kind -eq 'hidden') { (Get-Item $marker).Attributes = 'Hidden' }
+    }
+    $before = (Get-FileHash (Join-Path $guarded 'laowangbot.exe')).Hash
+    foreach ($rollbackGuard in @($false,$true)) {
+      $rejected = $false
+      try {
+        if ($rollbackGuard) { & $installer -NoService -Rollback -Root $guarded }
+        else { & $installer -NoService -Binary (Join-Path $work 'missing.exe') -Root $guarded }
+      } catch {
+        $expected = 'Windows 不支持源码自动'
+        if (!$_.ToString().Contains($expected)) { throw }
+        $rejected = $true
+      }
+      if (!$rejected) { throw 'Plugin deployment overwrite accepted' }
+      if ((Get-FileHash (Join-Path $guarded 'laowangbot.exe')).Hash -ne $before) { throw 'Guard changed binary' }
+    }
+  }
   Write-Host 'Windows offline migration/update/rollback tests passed'
 } finally { Remove-Item $work -Recurse -Force }

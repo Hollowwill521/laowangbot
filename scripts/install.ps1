@@ -26,6 +26,12 @@ if ($Migrate) {
   if (!(Test-Path -LiteralPath (Join-Path $Migrate 'config.json') -PathType Leaf)) { throw '旧部署缺少 config.json' }
 }
 $Root = [IO.Path]::GetFullPath($Root)
+# Check before downloading, creating temporary files, or touching scheduled tasks.
+$compiled = Test-Path -LiteralPath (Join-Path $Root '.compiled/current.json')
+$pluginDir = Join-Path $Root 'plugins'
+$hasPlugins = (Test-Path -LiteralPath $pluginDir -PathType Container) -and (Get-ChildItem -LiteralPath $pluginDir -Force | Select-Object -First 1)
+if ($compiled -and $Rollback) { throw '源码部署不能单独回滚二进制。Windows 不支持源码自动替换或回滚；请停止服务后，手动恢复二进制及匹配的源码快照。' }
+if ($compiled -or $hasPlugins) { throw '部署包含插件或源码构建记录，拒绝覆盖。Windows 不支持源码自动构建替换（停止服务后的 CLI 也不支持）；请在外部使用 Go 源码构建，停止服务后手动替换二进制及匹配的源码快照。' }
 if ($Root.Contains('"')) { throw 'Root cannot contain quotes' }
 if ($Migrate -and $Restore) { throw 'Choose migration or restore' }
 if (($Migrate -or $Restore) -and (Test-Path $Root) -and (Get-ChildItem -Force $Root | Select-Object -First 1)) { throw 'Migration/restore destination must be empty' }

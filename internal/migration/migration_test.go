@@ -124,3 +124,23 @@ func TestRejectDestinationSymlinkAncestorIntoSource(t *testing.T) {
 		t.Fatal("modified source")
 	}
 }
+
+func TestMigrationCopiesKnownPluginState(t *testing.T) {
+	src := fixture(t)
+	put(t, src, "assets/monitor/monitor.json", `{"monitor_settings":{"isGlobalEnabled":false}}`)
+	put(t, src, "assets/qdsg/signin_config.json", `{"tasks":[],"seq":"7"}`)
+	dst := filepath.Join(t.TempDir(), "new")
+	if _, e := Run(Options{Source: src, Destination: dst, Kind: "telebox"}); e != nil {
+		t.Fatal(e)
+	}
+	for _, f := range []string{"monitor/monitor.json", "qdsg/signin_config.json"} {
+		old, e := os.ReadFile(filepath.Join(src, "assets", f))
+		if e != nil {
+			t.Fatal(e)
+		}
+		now, e := os.ReadFile(filepath.Join(dst, "state", f))
+		if e != nil || string(old) != string(now) {
+			t.Fatal(f, e)
+		}
+	}
+}

@@ -26,6 +26,8 @@ var commandIdentifier = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 type Manifest struct {
+	Package         string   `json:"package,omitempty"`
+	Capabilities    []string `json:"capabilities,omitempty"`
 	Name            string   `json:"name"`
 	Description     string   `json:"description,omitempty"`
 	Version         string   `json:"version"`
@@ -61,6 +63,8 @@ type Manager struct {
 	// StateRoot keeps mutable plugin state in the deployment when Root is a
 	// private snapshot of the code. Empty means Root.
 	StateRoot string
+	HostURL   string
+	HostToken string
 }
 
 func (m Manager) directory(name string) (string, error) {
@@ -75,14 +79,23 @@ func (m Manager) directory(name string) (string, error) {
 	return filepath.Join(m.Root, "plugins", name), nil
 }
 func validate(v Manifest) error {
-	if !identifier.MatchString(v.Name) || v.Version == "" || v.ProtocolVersion != 1 {
+	if !identifier.MatchString(v.Name) || v.Version == "" || (v.ProtocolVersion != 1 && v.ProtocolVersion != 2) {
 		return errors.New("invalid name/version or unsupported protocol")
 	}
-	if v.Executable == "" || !filepath.IsLocal(v.Executable) || strings.Contains(v.Executable, "\\") {
+	if v.ProtocolVersion == 2 {
+		if v.Package != "." || v.Executable != "" || len(v.Args) != 0 || v.Persistent {
+			return errors.New("Go source manifest requires package=., no executable/args/persistent")
+		}
+	} else if v.Executable == "" || !filepath.IsLocal(v.Executable) || strings.Contains(v.Executable, "\\") {
 		return errors.New("executable must be a local relative path")
 	}
 	if v.TimeoutSeconds < 0 || v.TimeoutSeconds > 300 || v.IntervalSeconds < 0 || v.IntervalSeconds > 31536000 {
 		return errors.New("invalid timeout/interval")
+	}
+	for _, c := range v.Capabilities {
+		if !hostCapabilities[c] {
+			return errors.New("unknown host capability " + c)
+		}
 	}
 	if v.Persistent && len(v.Events) == 0 && v.IntervalSeconds == 0 {
 		return errors.New("persistent plugin requires an event or interval subscription")
@@ -143,6 +156,9 @@ func readManifest(dir string) (Manifest, error) {
 	})
 	if e != nil {
 		return v, e
+	}
+	if v.ProtocolVersion == 2 {
+		return v, validateSourceTree(dir)
 	}
 	fi, e := os.Stat(filepath.Join(dir, v.Executable))
 	if e != nil {
@@ -401,6 +417,9 @@ func (m Manager) start(ctx context.Context, name string) (*Worker, error) {
 	if e != nil {
 		return nil, e
 	}
+	if v.ProtocolVersion == 2 {
+		return nil, errors.New("Go source plugins must be compiled into the host")
+	}
 	dir, _ := m.directory(name)
 	dir, e = filepath.Abs(dir)
 	if e != nil {
@@ -426,7 +445,16 @@ func (m Manager) start(ctx context.Context, name string) (*Worker, error) {
 	cmd := exec.CommandContext(ctx, filepath.Join(dir, v.Executable), v.Args...)
 	configureProcess(cmd)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "LAOWANGBOT_STATE_DIR="+state, "LAOWANGBOT_PROTOCOL_VERSION=1")
+	env := []string{}
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(v, "LAOWANGBOT_HOST_") {
+			env = append(env, v)
+		}
+	}
+	cmd.Env = append(env, "LAOWANGBOT_STATE_DIR="+state, "LAOWANGBOT_PROTOCOL_VERSION=1")
+	if m.HostURL != "" && m.HostToken != "" {
+		cmd.Env = append(cmd.Env, "LAOWANGBOT_HOST_URL="+m.HostURL, "LAOWANGBOT_HOST_TOKEN="+m.HostToken)
+	}
 	cmd.WaitDelay = time.Second
 	stdin, e := cmd.StdinPipe()
 	if e != nil {
@@ -585,3 +613,5 @@ func copyPlugin(source, stage string, v Manifest) error {
 		return os.WriteFile(dest, b, mode)
 	})
 }
+
+var hostCapabilities = map[string]bool{"self": true, "resolve": true, "identity": true, "history": true, "messages": true, "send": true, "edit": true, "delete": true, "forward": true, "download": true, "click": true, "webview": true, "webview_data": true}

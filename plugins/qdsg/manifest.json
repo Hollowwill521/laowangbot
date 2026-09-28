@@ -1,0 +1,20 @@
+{
+  "name": "qdsg",
+  "version": "1.0.0",
+  "description": "Go 自动签到，八种模式、AI/OCR、CF 外援",
+  "commands": [
+    "qdsg"
+  ],
+  "capabilities": [
+    "history",
+    "messages",
+    "send",
+    "click",
+    "download",
+    "webview",
+    "webview_data"
+  ],
+  "protocol_version": 2,
+  "interval_seconds": 1,
+  "package": "."
+}

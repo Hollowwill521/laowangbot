@@ -55,3 +55,25 @@ cmp "$WORK/fixture" "$WORK/service/laowangbot"
 cmp "$WORK/original.plist" "$WORK/home/Library/LaunchAgents/io.github.laowangbot.plist"
 [ "$(grep -c '^bootstrap ' "$WORK/log")" = 2 ]
 echo 'Mock launchd rollback test passed'
+# Refuse official binary replacement before downloading or invoking the new binary.
+for kind in visible hidden compiled; do
+  guarded="$WORK/guard-$kind"
+  mkdir -p "$guarded"
+  cp "$WORK/fixture" "$guarded/laowangbot"
+  case "$kind" in
+    visible) mkdir -p "$guarded/plugins/example";;
+    hidden) mkdir -p "$guarded/plugins"; touch "$guarded/plugins/.saved";;
+    compiled) mkdir -p "$guarded/.compiled"; printf '{}' > "$guarded/.compiled/current.json";;
+  esac
+  if bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/does-not-exist" --root "$guarded" > "$WORK/guard-log" 2>&1; then
+    echo 'Plugin deployment overwrite accepted' >&2; exit 1
+  fi
+  grep -q -- '--source-update' "$WORK/guard-log"
+  cmp "$WORK/fixture" "$guarded/laowangbot"
+  [ ! -e "$guarded/laowangbot.previous" ]
+done
+# An empty plugin directory is safe for ordinary installations.
+mkdir -p "$WORK/new/plugins"
+rm "$WORK/new/fail-check"
+bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/fixture" --root "$WORK/new"
+echo 'Compiled/plugin deployment overwrite guards passed'

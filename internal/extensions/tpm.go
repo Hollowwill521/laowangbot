@@ -29,7 +29,7 @@ type tpmResult struct {
 }
 
 func tpmHelp(prefix string) string {
-	return "📦 laowangbot 插件管理器\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件\n" + prefix + "tpm ls/list [-v] 或 lv：已安装插件及来源\n" + prefix + "tpm i/install 名称…|all：单个、批量或全部安装\n" + prefix + "tpm i：回复 ZIP 插件包安装\n" + prefix + "tpm update/ua [名称…] [-f]：更新远程插件，省略名称更新全部\n" + prefix + "tpm rm/remove/uninstall/un 名称…|all：卸载代码，保留数据\n" + prefix + "tpm upload/ul 名称：导出 ZIP 插件包（不含状态）\n" + prefix + "tpm local 路径 / replace 路径：手动安装 / 替换\n\n远程源固定为当前项目；手动插件不参与远程更新。修改过的远程插件默认跳过，-f 才覆盖。安装、更新和卸载在重启后生效。"
+	return "📦 laowangbot 插件管理器\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件\n" + prefix + "tpm ls/list [-v] 或 lv：已安装插件及来源\n" + prefix + "tpm i/install 名称…|all：下载源码并编译进主程序\n" + prefix + "tpm i：回复 Go 源码 ZIP 包编译安装\n" + prefix + "tpm update/ua [名称…] [-f]：更新远程插件，省略名称更新全部\n" + prefix + "tpm rm/remove/uninstall/un 名称…|all：卸载代码，保留数据\n" + prefix + "tpm upload/ul 名称：导出 ZIP 插件包（不含状态）\n" + prefix + "tpm local 路径 / replace 路径：手动安装 / 替换\n\n远程源固定为当前项目；手动插件不参与远程更新。修改过的远程插件默认跳过，-f 才覆盖。安装、更新、卸载都会重新编译主程序，成功后自动重启（无重启组件时请手动重启）。需 Go（版本满足主项目 go.mod）、Git 与依赖下载网络；首次编译较慢。首次可通过 LAOWANGBOT_SOURCE 指定本地项目源码；否则获取当前版本标签源码。\n主程序更新：使用 " + prefix + "update check 检查，再用 " + prefix + "update run 获取新版源码，保留当前插件源码一起编译；失败保留旧程序。手动插件更新用 tpm replace 路径。仅接受 protocol_version=2 的 Go 源码包，旧可执行文件/TS 包必须迁移。Windows 暂不支持源码自编译替换，需外部构建后停止服务手动替换。"
 }
 func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(string) error) (tpmResult, error) {
 	if len(args) == 0 {
@@ -109,7 +109,7 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 		if e != nil {
 			return tpmResult{}, e
 		}
-		return tpmResult{Text: "手动插件已安装；重启后生效"}, nil
+		return tpmResult{Text: "手动插件已编译安装；重启后生效"}, nil
 	case "upload", "ul":
 		if len(rest) != 1 {
 			return tpmResult{}, errors.New("用法：tpm upload 名称")
@@ -225,7 +225,7 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 		}
 	}
 	title := fmt.Sprintf("TPM %s：成功 %d · 跳过 %d · 失败 %d", action, success, skipped, failed)
-	footer := "重启后生效；手动插件由用户自行适配"
+	footer := "已完成成功项的编译安装；重启后生效，手动插件源码会随主程序更新保留"
 	if action == "remove" {
 		footer = "插件数据保留；重启后停止加载卸载的插件"
 	}

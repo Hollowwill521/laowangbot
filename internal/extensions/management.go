@@ -3,6 +3,10 @@ package extensions
 import (
 	"context"
 	"errors"
+	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
+	"github.com/OrionG-hub/laowangbot/internal/sourceplugin"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,12 +16,22 @@ import (
 )
 
 func registerManagement(a *app.App, m plugin.Manager) {
-	a.Registry.Register(&command.Command{Name: "tpm", Description: "搜索、安装、更新、卸载和导出插件", Usage: "search|ls|i|update|rm|upload|local|replace", Timeout: 15 * time.Minute, Help: func(p string) string { return command.Escape(tpmHelp(p)) }, Handle: func(ctx context.Context, inv *command.Invocation) error {
+	a.Registry.Register(&command.Command{Name: "tpm", Description: "管理 Go 源码插件，编译进主程序", Usage: "search|ls|i|update|rm|upload|local|replace", Timeout: 30 * time.Minute, Help: func(p string) string { return command.Escape(tpmHelp(p)) }, Handle: func(ctx context.Context, inv *command.Invocation) error {
 		if len(inv.Args) == 0 || strings.EqualFold(inv.Arg(0), "help") || inv.Arg(0) == "h" {
 			return inv.EditText(ctx, tpmHelp(inv.Prefix))
 		}
+		binary, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		binary, err = filepath.EvalSymlinks(binary)
+		if err != nil {
+			return err
+		}
+		builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Source: a.Env.Get("LAOWANGBOT_SOURCE", ""), Repo: a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")}
+		compiledManager := &sourceManager{Manager: m, ctx: ctx, apply: builder.Apply}
 		var last time.Time
-		r, e := executeTPM(ctx, m, inv.Args, func(text string) error {
+		r, e := executeTPM(ctx, managedTPM{compiledManager, a.Registry}, inv.Args, func(text string) error {
 			if time.Since(last) < time.Second {
 				return nil
 			}
@@ -39,11 +53,11 @@ func registerManagement(a *app.App, m plugin.Manager) {
 			if e != nil {
 				return e
 			}
-			name, e := m.ImportPackage(file.Data, false)
+			name, e := compiledManager.ImportPackage(file.Data, false)
 			if e != nil {
 				return e
 			}
-			r.Text = "已安装手动插件 " + name + "；重启后生效。旧 TypeScript 代码必须先适配 laowangbot 协议。"
+			r.Text = "手动 Go 源码插件 " + name + " 已编译进主程序。"
 		}
 		if r.File != nil {
 			peer, e := inv.Client.InputPeer(inv.Message.Peer)
@@ -62,6 +76,12 @@ func registerManagement(a *app.App, m plugin.Manager) {
 			if e != nil {
 				return e
 			}
+		}
+		if compiledManager.changed {
+			if restart.Available() {
+				return restart.Now(ctx, inv, "tpm", "Go 源码插件已编译并安装，正在重启…", "编译成功，但重启失败；请手动重启服务。")
+			}
+			return inv.Reply(ctx, "Go 源码插件已编译并安装；请手动重启服务后生效。")
 		}
 		return nil
 	}})

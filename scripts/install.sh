@@ -35,6 +35,10 @@ if [ -n "$MIGRATE" ]; then
   MIGRATE=$(cd -- "$MIGRATE" && pwd -P)
 fi
 case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT";; esac
+# Official binaries cannot preserve locally compiled plugins.
+if [ -e "$ROOT/.compiled/current.json" ] || { [ -d "$ROOT/plugins" ] && [ -n "$(ls -A "$ROOT/plugins")" ]; }; then
+  die '部署包含插件或源码构建记录，拒绝覆盖。请使用 .update run，或停止服务后运行 laowangbot --source-update TAG --root DIR；源码回滚使用 --source-rollback。'
+fi
 # Service formats have expansion syntax; reject it before any changes.
 case "$ROOT" in *[!A-Za-z0-9._/-]*) [ "$SERVICE" = 0 ] || die 'Service root must contain only letters, numbers, / . _ -';; esac
 if [ "$SERVICE" = 1 ] && [ "$OS" = linux ]; then

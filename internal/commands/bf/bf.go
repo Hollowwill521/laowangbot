@@ -18,7 +18,7 @@ import (
 
 // installURL 是恢复说明里让人运行的地址。它直接写在备份文件自己的说明
 // 文字里，因为真正用到它的时候，人在一台全新的机器上，手边没有别的线索。
-const installURL = "https://raw.githubusercontent.com/OrionG-hub/laowangbot/main/scripts/install.sh"
+const installURL = "https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh"
 
 // captionFileLimit 让文件列表不超出 Telegram 说明文字的 1024 字符上限；
 // 再多的话，给出总数就够了。

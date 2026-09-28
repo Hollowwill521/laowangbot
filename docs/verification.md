@@ -49,3 +49,7 @@ Windows PowerShell 脚本和 Dockerfile 已进入 CI；本机没有 PowerShell�
 - 通过模拟 Telegram 下载 RPC，验证 WebM/静态贴纸不被丢弃，以及实际 TGS 转换结果进入语录请求。
 - Windows amd64 交叉构建通过。Docker TGS 可选构建和 Windows/Linux 原生转换未在本机运行。
 - 未使用真实 Telegram 会话调用远端 quote 服务，最终线上语录回传仍未验证；本地合成 fixture 不代表对用户原贴纸的实际抓取或线上验收。
+
+## 0.1.1 提交前验证
+
+版本按最后一位递增，本次为 0.1.1。插件架构切换为 Go 源码协议 v2，TPM 编译成功后提交源码及二进制，失败保留旧部署。monitor、qdsg 首版均为 1.0.0。全套单元/race、integration 标签集成、覆盖率和 vet 已执行；Windows 的运行中源码编译替换明确不支持，相关测试跳过，不能据交叉编译宣称已支持。真实 Telegram、OCR 模型、CF 外援未联调。

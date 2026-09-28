@@ -71,26 +71,24 @@ func fetchCatalog(ctx context.Context, client *http.Client, catalogURL string, r
 			return catalog, errors.New("duplicate catalog entry")
 		}
 		names[entry.Manifest.Name] = true
-		if len(entry.Files) == 0 || len(entry.Files) > 128 {
-			return catalog, errors.New("invalid file count")
-		}
-		paths := map[string]bool{}
-		for _, file := range entry.Files {
-			clean := path.Clean(file.Path)
-			if !safePackagePath(file.Path) || clean == "manifest.json" || reservedPath(clean) || paths[clean] {
-				return catalog, errors.New("invalid or duplicate remote path")
+		if len(entry.Platforms) == 0 {
+			if err = validateCatalogFiles(entry.Manifest, entry.Files, restricted); err != nil {
+				return catalog, err
 			}
-			paths[clean] = true
-			expected, err := hex.DecodeString(file.SHA256)
-			if err != nil || len(expected) != 32 {
-				return catalog, errors.New("invalid sha256")
+		} else {
+			for target, p := range entry.Platforms {
+				if !validTarget(target) {
+					return catalog, errors.New("unknown plugin platform")
+				}
+				v := entry.Manifest
+				v.Executable = p.Executable
+				if err = validate(v); err != nil {
+					return catalog, err
+				}
+				if err = validateCatalogFiles(v, p.Files, restricted); err != nil {
+					return catalog, err
+				}
 			}
-			if restricted && !trustedURL(file.URL) {
-				return catalog, errors.New("download outside current project")
-			}
-		}
-		if !paths[filepath.ToSlash(filepath.Clean(entry.Manifest.Executable))] {
-			return catalog, errors.New("catalog executable missing")
 		}
 	}
 	return catalog, nil
@@ -360,4 +358,44 @@ func (m Manager) ImportPackage(data []byte, replace bool) (string, error) {
 		return "", err
 	}
 	return manifest.Name, nil
+}
+
+func validTarget(s string) bool {
+	switch s {
+	case "linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64", "windows/amd64", "windows/arm64":
+		return true
+	}
+	return false
+}
+func validateCatalogFiles(v Manifest, files []RemoteFile, restricted bool) error {
+	if len(files) == 0 || len(files) > 128 {
+		return errors.New("invalid file count")
+	}
+	paths := map[string]bool{}
+	for _, file := range files {
+		clean := path.Clean(file.Path)
+		if !safePackagePath(file.Path) || clean == "manifest.json" || reservedPath(clean) || paths[clean] {
+			return errors.New("invalid or duplicate remote path")
+		}
+		paths[clean] = true
+		expected, err := hex.DecodeString(file.SHA256)
+		if err != nil || len(expected) != 32 {
+			return errors.New("invalid sha256")
+		}
+		if restricted && !trustedURL(file.URL) {
+			return errors.New("download outside current project")
+		}
+	}
+	if v.ProtocolVersion == 2 {
+		for p := range paths {
+			if strings.HasSuffix(p, ".go") {
+				return nil
+			}
+		}
+		return errors.New("catalog Go source missing")
+	}
+	if !paths[filepath.ToSlash(filepath.Clean(v.Executable))] {
+		return errors.New("catalog executable missing")
+	}
+	return nil
 }

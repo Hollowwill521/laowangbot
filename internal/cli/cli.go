@@ -28,8 +28,10 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/migration"
 	"github.com/OrionG-hub/laowangbot/internal/platform"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
+	"github.com/OrionG-hub/laowangbot/internal/sourceplugin"
 	"github.com/OrionG-hub/laowangbot/internal/sysinfo"
 	"github.com/OrionG-hub/laowangbot/internal/verify"
+	buildinfo "github.com/OrionG-hub/laowangbot/internal/version"
 )
 
 // version 在构建时注入（scripts/build.sh）。
@@ -37,27 +39,41 @@ var version = ""
 
 func Main(buildVersion string) {
 	version = buildVersion
+	if version == "" {
+		version = buildinfo.Current
+	}
 	var (
-		pluginAction = flag.String("plugin", "", "list|install-local|replace-local|install|update")
-		pluginSource = flag.String("plugin-source", "", "local directory or catalog plugin name")
-		supervise    = flag.Bool("supervise", false, "serve under the portable restart supervisor")
-		migrateFrom  = flag.String("migrate", "", "import an old deployment into a new empty --root")
-		sourceKind   = flag.String("from", "auto", "migration source: auto, mibot-lite, mibox, telebox")
-		root         = flag.String("root", ".", "deployment directory holding config.json")
-		serve        = flag.Bool("serve", false, "connect and serve commands")
-		check        = flag.Bool("check", false, "validate the account and session without connecting")
-		signIn       = flag.Bool("login", false, "sign a Telegram account in and write config.json under --root")
-		force        = flag.Bool("force", false, "with --login or --restore, replace an existing account")
-		restoreFrom  = flag.String("restore", "", "unpack a backup made by .bf or --backup into --root; the service on that directory must be stopped")
-		backupTo     = flag.String("backup", "", "write the same backup .bf sends, to a file, without connecting")
-		apiID        = flag.Int("api-id", 0, "with --login, the api_id from my.telegram.org")
-		apiHash      = flag.String("api-hash", "", "with --login, the api_hash from my.telegram.org")
-		importMibox  = flag.String("import-mibox", "", "copy the plugin data files of a MiBox deployment directory into --root/data")
-		check2       = flag.Bool("verify", false, "connect and run every read-only command against the live account, in Saved Messages")
-		verbose      = flag.Bool("verbose", false, "log at debug level, including the protocol trace")
-		showVersion  = flag.Bool("version", false, "print the version and exit")
+		sourceUpdate   = flag.String("source-update", "", "fetch a release tag and rebuild with installed Go source plugins")
+		sourceRollback = flag.Bool("source-rollback", false, "restore previous binary and plugin sources; state is preserved")
+		checkPlugins   = flag.Bool("check-plugins", false, "validate statically compiled plugin manifests and command collisions without login")
+		pluginAction   = flag.String("plugin", "", "list|install-local|replace-local|install|update|remove (Go source rebuild)")
+		pluginSource   = flag.String("plugin-source", "", "local directory or catalog plugin name")
+		supervise      = flag.Bool("supervise", false, "serve under the portable restart supervisor")
+		migrateFrom    = flag.String("migrate", "", "import an old deployment into a new empty --root")
+		sourceKind     = flag.String("from", "auto", "migration source: auto, mibot-lite, mibox, telebox")
+		root           = flag.String("root", ".", "deployment directory holding config.json")
+		serve          = flag.Bool("serve", false, "connect and serve commands")
+		check          = flag.Bool("check", false, "validate the account and session without connecting")
+		signIn         = flag.Bool("login", false, "sign a Telegram account in and write config.json under --root")
+		force          = flag.Bool("force", false, "with --login or --restore, replace an existing account")
+		restoreFrom    = flag.String("restore", "", "unpack a backup made by .bf or --backup into --root; the service on that directory must be stopped")
+		backupTo       = flag.String("backup", "", "write the same backup .bf sends, to a file, without connecting")
+		apiID          = flag.Int("api-id", 0, "with --login, the api_id from my.telegram.org")
+		apiHash        = flag.String("api-hash", "", "with --login, the api_hash from my.telegram.org")
+		importMibox    = flag.String("import-mibox", "", "copy the plugin data files of a MiBox deployment directory into --root/data")
+		check2         = flag.Bool("verify", false, "connect and run every read-only command against the live account, in Saved Messages")
+		verbose        = flag.Bool("verbose", false, "log at debug level, including the protocol trace")
+		showVersion    = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()
+
+	if *checkPlugins {
+		if err := checkCompiled(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *showVersion {
 		fmt.Println(displayVersion())
@@ -65,6 +81,24 @@ func Main(buildVersion string) {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *serve || *supervise || *check || *pluginAction != "" || *sourceUpdate != "" || *sourceRollback {
+		binary, err := os.Executable()
+		if err == nil {
+			binary, err = filepath.EvalSymlinks(binary)
+		}
+		_, pendingErr := os.Lstat(filepath.Join(*root, ".compiled", "pending"))
+		recovered := pendingErr == nil
+		if err == nil {
+			err = (sourceplugin.Builder{Root: *root, Binary: binary}).Recover()
+		}
+		if err == nil && recovered {
+			err = reexec(binary)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "恢复未完成的源码构建失败：", err)
+			os.Exit(1)
+		}
+	}
 	if *supervise {
 		binary, err := os.Executable()
 		if err == nil {
@@ -77,7 +111,7 @@ func Main(buildVersion string) {
 		return
 	}
 
-	if *pluginAction != "" {
+	if *pluginAction != "" || *sourceUpdate != "" || *sourceRollback {
 		if err := os.MkdirAll(*root, 0700); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -89,21 +123,51 @@ func Main(buildVersion string) {
 		}
 		defer lock.Close()
 		m := plugin.Manager{Root: *root}
+		binary, e := os.Executable()
+		if e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			os.Exit(1)
+		}
+		binary, e = filepath.EvalSymlinks(binary)
+		if e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			os.Exit(1)
+		}
+		env := config.ReadEnv(*root, os.Environ())
+		builder := sourceplugin.Builder{Root: *root, Binary: binary, Version: version, Repo: env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Source: env.Get("LAOWANGBOT_SOURCE", "")}
+		if *sourceUpdate != "" || *sourceRollback {
+			if *sourceRollback {
+				err = builder.Rollback(ctx)
+			} else {
+				err = builder.Update(ctx, *sourceUpdate)
+			}
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println("程序和插件源码已更新；请启动服务。")
+			return
+		}
 		switch *pluginAction {
 		case "list":
-			items, e := m.List()
+			items, e := m.Installed()
 			err = e
 			for _, v := range items {
-				fmt.Println(v.Name, v.Version)
+				fmt.Println(v.Manifest.Name, v.Manifest.Version, v.Source)
+				if v.Manifest.ProtocolVersion != 2 {
+					fmt.Println("旧独立进程插件已停用，请迁移为 Go 源码包")
+				}
 			}
 		case "install-local":
-			err = m.InstallLocal(*pluginSource)
+			err = builder.Apply(ctx, func(stage plugin.Manager) error { return stage.InstallLocal(*pluginSource) })
 		case "replace-local":
-			err = m.ReplaceLocal(*pluginSource)
+			err = builder.Apply(ctx, func(stage plugin.Manager) error { return stage.ReplaceLocal(*pluginSource) })
 		case "install":
-			err = m.InstallRemote(ctx, *pluginSource)
+			err = builder.Apply(ctx, func(stage plugin.Manager) error { return stage.InstallRemote(ctx, *pluginSource) })
+		case "remove":
+			err = builder.Apply(ctx, func(stage plugin.Manager) error { return stage.Remove(*pluginSource) })
 		case "update":
-			err = m.UpdateRemote(ctx, *pluginSource)
+			err = builder.Apply(ctx, func(stage plugin.Manager) error { return stage.UpdateRemote(ctx, *pluginSource) })
 		default:
 			err = fmt.Errorf("unknown plugin action %q", *pluginAction)
 		}
@@ -263,4 +327,17 @@ func restore(file, root string, overwrite bool) error {
 		fmt.Println("  " + name)
 	}
 	return nil
+}
+
+// Registration initializes stores, so validate using an isolated throwaway root.
+func checkCompiled() error {
+	root, err := os.MkdirTemp("", "laowangbot-check-plugins-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(root)
+	probe := &app.App{Root: root, Registry: command.New([]string{"."}, slog.Default())}
+	defer probe.Close()
+	commands.RegisterAll(probe)
+	return extensions.ValidateCompiled(probe)
 }

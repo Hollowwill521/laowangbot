@@ -112,3 +112,47 @@ func TestCrossProcessTransactionLock(t *testing.T) {
 		t.Fatalf("lock not respected: %s %v", b, e)
 	}
 }
+
+func TestHostBridgeEnvironmentOnlyForConfiguredPlugin(t *testing.T) {
+	t.Setenv("LAOWANGBOT_HOST_TOKEN", "not-inherited")
+	t.Setenv("LAOWANGBOT_HOST_URL", "http://127.0.0.1:1")
+	// A non-capability plugin must never inherit the parent bridge token.
+	executable, e := os.Executable()
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, e := os.ReadFile(executable)
+	if e != nil {
+		t.Fatal(e)
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "helper.exe"), b, 0700)
+	raw, _ := json.Marshal(Manifest{Name: "native", Version: "1", ProtocolVersion: 1, Executable: "helper.exe", Args: []string{"-test.run=^TestNativeBridgeEnvHelper$"}, Commands: []string{"echo"}})
+	os.WriteFile(filepath.Join(dir, "manifest.json"), raw, 0600)
+	m := Manager{Root: t.TempDir()}
+	if e = m.InstallLocal(dir); e != nil {
+		t.Fatal(e)
+	}
+	r, e := m.Run(t.Context(), "native", Request{Type: "command", Command: "echo"})
+	if e != nil || r.Text != "empty" {
+		t.Fatal(r, e)
+	}
+	m.HostURL = "http://127.0.0.1:2"
+	m.HostToken = "scoped"
+	r, e = m.Run(t.Context(), "native", Request{Type: "command", Command: "echo"})
+	if e != nil || r.Text != "scoped" {
+		t.Fatal(r, e)
+	}
+}
+func TestNativeBridgeEnvHelper(t *testing.T) {
+	if os.Getenv("LAOWANGBOT_PROTOCOL_VERSION") != "1" {
+		return
+	}
+	bufio.NewScanner(os.Stdin).Scan()
+	token := os.Getenv("LAOWANGBOT_HOST_TOKEN")
+	if token == "" {
+		token = "empty"
+	}
+	json.NewEncoder(os.Stdout).Encode(Response{Version: 1, Text: token})
+	os.Exit(0)
+}

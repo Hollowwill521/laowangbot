@@ -1,70 +1,83 @@
-# 独立进程插件
+# Go 源码插件
 
-核心不依赖 Node.js。插件可以使用 Go、Python、Shell 或其他语言；相应运行时由用户自行安装。旧版 JavaScript 插件不会自动转换，需要用户按本协议适配。插件与机器人拥有相同系统权限，只安装可信代码；私有状态目录并不是安全沙箱。
+插件以 Go 源码分发，安装时编译进 laowangbot。运行不需要 Go；安装、更新和卸载需要与宿主 `go.mod` 匹配的 Go 工具链、Git 及构建依赖的网络访问。依赖版本由宿主固定，插件包不能自带 `go.mod`、`go.work` 或依赖锁文件。
 
-每个插件目录包含 `manifest.json` 和可执行文件。参见 `examples/plugins/echo`。
-
-```json
-{"name":"example","version":"1.0.0","protocol_version":1,"executable":"plugin","args":["--mode","bot"],"commands":["example"],"events":[],"interval_seconds":0,"persistent":false,"timeout_seconds":15}
-```
-
-插件名称允许小写字母开头的小写字母、数字、下划线、连字符，最多 64 字符；命令名仅允许大小写字母、数字和下划线。可执行文件必须位于插件目录内，不允许绝对路径、目录逃逸或符号链接；参数通过 argv 原样传递，不经 shell 展开。Windows 使用 `.exe` 文件。解释器程序可使用带 shebang 的脚本（Unix），或用户提供的启动器。
-
-宿主向标准输入发送一行 JSON，插件向标准输出回复一行 JSON。标准输出仅用于协议，日志写标准错误。请求示例：
+每个包根目录包含 `manifest.json` 和一个 Go 包；资源使用 `go:embed`。示例见 `examples/plugins/echo`：
 
 ```json
-{"version":1,"type":"command","command":"example","args":["hello"],"text":"hello"}
-{"version":1,"type":"event","event":{"type":"message","text":"hello"}}
-{"version":1,"type":"tick"}
+{"name":"echo","version":"2.0.0","protocol_version":2,"package":".","commands":["plugin_hello"],"timeout_seconds":5}
 ```
 
-响应：`{"version":1,"text":"reply","error":""}`。每个请求必须得到一个响应，版本必须为 1。单行输出上限 1 MiB，标准错误累计上限 1 MiB。默认单次调用超时 15 秒，清单允许 1–300 秒；取消和超时在 Unix 上终止插件进程组，Windows 上终止直接插件进程。插件应管理自己的子进程；宿主不提供操作系统级子进程沙箱。
+不再支持 `executable`、`args`、`persistent`。根包导出：
 
-`LAOWANGBOT_STATE_DIR` 指向 `<root>/state/<name>`，安装或升级不会替换此目录；`LAOWANGBOT_PROTOCOL_VERSION=1` 标记协议。默认每次调用创建进程。只有声明 `persistent: true` 并且配置事件或间隔时，宿主才可通过 `StartWorker` 启动常驻进程；`Call` 串行调用，`Close` 终止进程。事件筛选和定时调度由机器人集成层负责，插件不会自行获得 Telegram 凭据。
-
-本地安装复制整个目录到 `<root>/plugins/<name>`，已有插件拒绝覆盖。本地安装不会参与远程更新。远程安装与更新仅读取当前项目 `OrionG-hub/laowangbot` 的 `master/plugins/catalog.json`，下载与重定向限定同一项目的 raw.githubusercontent.com 路径；目录中每个文件必须提供 SHA-256。下载和校验成功后通过暂存目录替换，并保留用户状态。远程目录不存在或尚未发布时会明确失败，不能视为已经上线。
-
-目录格式：
-
-```json
-{"plugins":[{"manifest":{"name":"example","version":"1.0.0","protocol_version":1,"executable":"plugin","commands":["example"]},"files":[{"path":"plugin","url":"https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/plugins/example/plugin","sha256":"64位十六进制SHA-256"}]}]}
+```go
+func Open(ctx context.Context, host pluginapi.Host, stateDir string) (pluginapi.Plugin, error)
 ```
 
-开发 API：`Manager{Root: dir}`，`List`、`Load`、`InstallLocal`、`InstallRemote(ctx,name)`、`UpdateRemote(ctx,name)`、`Run(ctx,name,request)`。常驻插件使用 `StartWorker`、`Worker.Call` 和 `Worker.Close`。宿主应拒绝插件命令覆盖内建命令。
+`pluginapi.Plugin` 实现 `Handle(context.Context, pluginapi.Request) pluginapi.Response` 和 `Close()`。使用 `github.com/OrionG-hub/laowangbot/pkg/pluginapi`；响应版本使用 `pluginapi.Version`。构造器接收宿主 API 和部署中的私有状态目录；插件应遵守调用上下文取消，并在 `Close` 释放资源。命令、消息事件和 tick 请求由宿主派发，通知使用响应的 `messages`。
 
-响应还可含 `messages`：`{"version":1,"messages":[{"chat_id":"12345","text":"scheduled notification"}]}`，每次最多 20 条。集成层发送这些纯文本通知；命令的 `text` 用于编辑命令消息，事件的 `text` 用于回复事件，定时任务的 `text` 不发送；发送通知请使用 `messages`。使用 `ReplaceLocal(sourceDir)` 可显式替换已有插件；替换后该插件由用户手动维护，不再参与远程更新。
+插件与宿主同进程、同权限，没有安全沙箱。只安装可信源码；Go 编译及启动检查也会执行包初始化代码。超时不能强行终止不响应上下文的 Go 代码。
 
-Manifest 完整文件不得超过 64 KiB，且只允许一个 JSON 对象。替换使用隐藏备份；下次列出、加载或安装时自动恢复中断的替换，保留最后有效副本。等待常驻进程的调用也遵守调用方取消和超时。
+## 构建与生效
 
-定时间隔最大为 31,536,000 秒（一年）。响应 `error` 非空时宿主将调用视为失败，不发送同一响应的文本。
+源码保存在 `<root>/plugins/<name>`，运行时仅使用编译注册表，不执行目录内的程序。状态保存在 `<root>/state/<name>`，更新、卸载及回滚不回退状态。构建区不复制会话、账号数据或插件状态。
 
-CLI 插件操作需停止正在使用同一部署目录的机器人；运行中使用 `.tpm`。消息事件观察新收到的、可寻址的其他账号消息，独立于 sudo/sure 是否消费该消息，不包含历史补发和编辑。
+首次构建优先使用 `LAOWANGBOT_SOURCE` 指向的本地宿主源码目录；未配置时获取当前宿主版本对应的 GitHub 标签源码。开发版本应配置本地源码。成功构建后保留源码快照，后续插件操作复用该快照；主程序升级则获取目标发布标签的源码。
 
-运行实例在启动时固定插件代码及清单副本，安装或更新不改变正在运行的命令和常驻进程依赖文件；重启后加载新版本。状态目录始终保留在原部署中。
+安装、更新、卸载会暂存源码、生成注册代码、编译宿主并通过 `--check-plugins` 离线检查清单与命令冲突。成功后替换源码和二进制，重启后生效；失败保留旧程序。编译可能耗时，首次可能下载依赖。TPM 和主程序更新共享部署构建锁。
+
+运行中使用 `.tpm`；CLI 管理前停止同一部署实例。Windows 暂不支持源码自动构建替换；即使停止服务，CLI 本身仍占用可执行文件，也不能自行替换。需在外部使用 Go 源码构建，停止服务后手动替换二进制及匹配的源码快照。
 
 ## TPM 命令
 
-TPM 仅限账号本人使用；没有自定义源。远程目录固定为本项目的 `plugins/catalog.json`。
+TPM 仅限账号本人使用；远程源固定为本项目 `master/plugins/catalog.json`。
 
 | 命令 | 作用 |
 |---|---|
-| `.tpm` / `.tpm help` | 显示帮助 |
-| `.tpm search 关键词` / `.tpm s` | 按名称、说明或命令搜索；不带关键词显示远程列表 |
-| `.tpm ls` / `.tpm list` | 已安装插件、版本及远程/手动来源 |
-| `.tpm ls -v` / `.tpm lv` | 详细说明、命令、来源、安装/更新时间与修改状态 |
-| `.tpm i 名称1 名称2` / `.tpm install 名称` | 安装指定远程插件 |
-| `.tpm i all` | 安装目录中尚未安装的插件，保留已有插件 |
-| 回复 ZIP 文件发送 `.tpm i` | 导入适配 laowangbot 的手动插件包；已有同名插件拒绝覆盖 |
-| `.tpm update` / `.tpm ua` / `.tpm updateAll` | 更新全部已安装的远程插件，跳过手动插件 |
-| `.tpm update 名称1 名称2` | 只更新指定远程插件 |
-| `.tpm update -f` | 显式覆盖远程插件的本地修改，仍不更新手动插件 |
-| `.tpm rm 名称1 名称2` / `.tpm remove all` | 卸载插件代码，保留 `state/<name>` 数据 |
-| `.tpm uninstall` / `.tpm un` | `rm` 的别名，必须给名称或 `all` |
-| `.tpm upload 名称` / `.tpm ul 名称` | 将插件代码导出为 ZIP，发到当前对话；不包含私有状态及远程更新标记 |
-| `.tpm local 目录` / `.tpm replace 目录` | 从服务器目录手动安装/替换 |
+| `.tpm` / `.tpm help` | 帮助 |
+| `.tpm search 关键词` / `.tpm s` | 搜索；不带关键词列出目录 |
+| `.tpm ls` / `.tpm list` | 本地插件及来源 |
+| `.tpm ls -v` / `.tpm lv` | 版本、命令、更新时间与修改状态 |
+| `.tpm i 名称1 名称2` / `.tpm install 名称` | 安装远程源码包 |
+| `.tpm i all` | 安装尚未安装的目录项 |
+| 回复 ZIP 文件发送 `.tpm i` | 安装手动源码包；拒绝覆盖同名插件 |
+| `.tpm update` / `.tpm ua` / `.tpm updateAll` | 更新已安装远程插件；跳过手动插件 |
+| `.tpm update 名称1 名称2` | 更新指定远程插件 |
+| `.tpm update -f` | 允许覆盖远程插件的本地修改 |
+| `.tpm rm 名称1 名称2` / `.tpm remove all` | 卸载源码并重新编译；保留状态 |
+| `.tpm uninstall` / `.tpm un` | `rm` 别名，需名称或 `all` |
+| `.tpm upload 名称` / `.tpm ul 名称` | 导出源码 ZIP；不含状态和更新标记 |
+| `.tpm local 目录` / `.tpm replace 目录` | 手动安装或替换源码包 |
 
-安装、更新、卸载都在重启后生效。批量操作逐个处理；失败项不会撤销已经成功的项，最后汇总成功/跳过/失败。默认更新会检测远程插件包中文件的新增、删除及内容修改，检测到修改时跳过；旧安装没有校验基线时也跳过，可检查代码后显式使用 `-f`。从 ZIP 导入的插件一律按手动插件维护。
+批量操作逐项处理，失败项不撤销此前成功项。默认远程更新检测文件新增、删除和修改；本地有修改或缺少校验基线时跳过，需要检查后显式 `-f`。ZIP 导入和本地替换的包按手动插件维护。
 
-### ZIP 插件包
+ZIP 根目录直接放清单和 Go 包，不额外包一层目录。不接受符号链接、路径穿越或重复路径。压缩包最多 33 MiB，解压内容最多 32 MiB、129 个文件（含清单），ZIP 条目最多 256 个。
 
-ZIP 根目录必须包含 `manifest.json` 和其指定的可执行文件，可包含依赖资源子目录；不能额外包一层目录。不接受原 TeleBox 的 `.ts` 文件直接安装。导入只解包和校验，不运行插件；重启后才加载。压缩包最多 33 MiB，解压内容最多 32 MiB、129 个文件（含清单），ZIP 总条目最多 256 个，并拒绝路径穿越、符号链接和重复路径。插件依赖的 Python、Shell 等运行环境仍需自行提供；Windows 请打包适用的可执行程序。
+## 主程序升级与回滚
+
+`.update run` 拉取目标标签的宿主源码，携带当前本地插件重新编译，成功后替换并重启；它不会自动更新手动插件源码。Linux/macOS 停止服务后也可运行：
+
+```sh
+./laowangbot --source-update v0.1.2 --root /path/to/deployment
+./laowangbot --source-rollback --root /path/to/deployment
+```
+
+源码回滚同时恢复二进制和对应插件源码快照，保留当前状态。官方安装脚本只下载预编译宿主；发现非空 `plugins/` 或 `.compiled/current.json` 时拒绝覆盖，避免丢失已编译插件。Windows 安装器的 `-Rollback` 同样拒绝源码部署；当前没有自动替换或回滚方案，需停止服务后手动恢复二进制及匹配的源码快照。
+
+## 发布源码目录
+
+```sh
+bash scripts/build-plugins.sh v0.1.2
+# 审核后显式更新仓库目录（不会推送或发布）：
+go run ./cmd/plugin-catalog --tag v0.1.2 --output plugins/catalog.json
+```
+
+构建脚本仅生成 `dist/plugins-catalog.json`，不生成平台插件可执行文件。生成器读取示例及 `plugins/` 中的清单，只收录协议 2 的源码包；旧协议打印跳过原因。每个源文件和资源使用实际 SHA-256，下载 URL 固定到指定标签的本仓库 raw 路径。清单位于目录项中，不重复列为下载文件。
+
+发布者需保证标签上的源码与计算哈希时完全一致，并将审核后的目录更新到 `master/plugins/catalog.json`；仅上传 release 附件不会更新机器人使用的目录。本地生成或编译成功不代表远程已发布。
+
+## 旧插件迁移
+
+协议 1 的独立进程包、Shell/Python 启动器、原 TeleBox `.ts` 文件不能直接安装。将逻辑改为上述 Go 包接口，资源嵌入二进制，并把数据写入构造器给定的 `stateDir`。旧目录仅提示迁移，可卸载或用新源码包显式替换；不会自动运行旧可执行文件。
+
+`qdsg` 的本地 OCR Python 脚本已通过 `go:embed` 打包；选择该模式仍需自行配置 Python、ddddocr、OpenCV 和 NumPy，源码编译不会安装这些运行依赖。
