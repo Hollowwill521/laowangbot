@@ -4,16 +4,35 @@ param(
   [string]$Version = 'latest',
   [string]$Binary,
   [string]$Migrate,
+  [switch]$Wizard,
   [ValidateSet('auto','mibot-lite','mibox','telebox')][string]$From = 'auto',
   [string]$Restore,
   [switch]$NoService,
   [switch]$Rollback
 )
 $ErrorActionPreference = 'Stop'
+if ($Wizard) {
+  if ($Migrate -or $Restore -or $Rollback) { throw '-Wizard cannot be combined with -Migrate, -Restore or -Rollback' }
+  Write-Host "迁移到 laowangbot：无需手动复制配置、会话和数据。`n1) mibot-lite`n2) MiBox`n3) TeleBox`n0) 取消"
+  switch (Read-Host '请选择旧人形 [1-3]') {
+    '1' { $From = 'mibot-lite' }; '2' { $From = 'mibox' }; '3' { $From = 'telebox' }
+    default { throw '已取消，未更改旧部署' }
+  }
+  $Migrate = Read-Host '旧部署目录（包含 config.json）'
+  if (!$Migrate) { throw '旧目录不能为空，迁移已取消' }
+}
+if ($Migrate) {
+  $Migrate = (Resolve-Path -LiteralPath $Migrate -ErrorAction Stop).Path
+  if (!(Test-Path -LiteralPath (Join-Path $Migrate 'config.json') -PathType Leaf)) { throw '旧部署缺少 config.json' }
+}
 $Root = [IO.Path]::GetFullPath($Root)
 if ($Root.Contains('"')) { throw 'Root cannot contain quotes' }
 if ($Migrate -and $Restore) { throw 'Choose migration or restore' }
 if (($Migrate -or $Restore) -and (Test-Path $Root) -and (Get-ChildItem -Force $Root | Select-Object -First 1)) { throw 'Migration/restore destination must be empty' }
+if ($Wizard) {
+  Write-Host "旧目录：$Migrate`n新目录：$Root`n旧目录保留，未知插件归档并列入报告。"
+  if ((Read-Host '确认旧人形已停止（计划任务、Docker、PM2 等），输入 y 继续') -notin @('y','Y')) { throw '已取消，请先停止旧实例' }
+}
 $exe = Join-Path $Root 'laowangbot.exe'
 $previous = Join-Path $Root 'laowangbot.previous.exe'
 $work = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
@@ -75,6 +94,7 @@ try {
     Start-ScheduledTask -TaskName laowangbot
   } elseif ($stopped) { Start-ScheduledTask -TaskName laowangbot }
   if ($hadBinary) { Copy-Item (Join-Path $work 'old.exe') $previous -Force }
+  if ($Migrate) { Write-Host "旧部署保留：$Migrate；迁移报告：$(Join-Path $Root 'migration-report.json')" }
   Write-Host "Installed $exe; configuration checked, Telegram connectivity not verified."
 } catch {
   $failure = $_

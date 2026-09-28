@@ -52,3 +52,5 @@ LAOWANGBOT_UPDATE_REPO=OrionG-hub/laowangbot
 迁移保留已配置前缀，无前缀设置时才采用四个默认字符。MiBox/TeleBox 的 `TB_PREFIX` 由迁移器转换。AI、摘要等插件级设置用 `.help ai`、`.help sum` 查看；含密钥的设置请在收藏夹执行。
 
 下载式安装与核心更新需要对应 Release 的平台构件和校验文件；仓库源码存在不代表某个版本已完成发布。远程插件目录来自当前项目 `master` 分支，不随核心更新仓库覆盖值切换。插件子进程获知 `LAOWANGBOT_STATE_DIR` 和 `LAOWANGBOT_PROTOCOL_VERSION`，参见[插件协议](plugins.md)。
+
+`LAOWANGBOT_PYTHON`：TGS 动画转换使用的 Python 可执行文件，默认 `python3`。仅支持进程环境变量；该环境须安装 `rlottie-python` 和 `Pillow`，并能找到 ffmpeg。见 [TGS 安装说明](../INSTALL.md#yvlu-动态贴纸)。

@@ -101,3 +101,9 @@ bash scripts/build.sh
 独立开发起点为 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) 的 `dbc404a2323061c4abd7f13088622e1d045153fa`，本地工作分支 `refactor/laowangbot`。感谢原作者与贡献者；保留 [LGPL-2.1 许可证](LICENSE) 和原有归属。迁移兼容性以实际转换范围为准。
 
 状态卡片字体来自 Noto Sans SC，按 [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) 分发。
+
+## 插件管理（TPM）
+
+`.tpm s 关键词` 搜索，`.tpm ls -v` 查看详情，`.tpm i 名称1 名称2` 或 `.tpm i all` 安装，`.tpm update` 批量更新，`.tpm rm 名称` 卸载，`.tpm ul 名称` 导出 ZIP。回复适配后的 ZIP 文件发送 `.tpm i` 可手动安装。远程源固定为本项目；手动插件不自动更新，本地修改默认受保护，变更重启后生效。见[完整用法](docs/plugins.md#tpm-命令)。
+
+同机迁移无需复制配置：运行 `sudo bash scripts/install.sh --wizard --root /opt/laowangbot`（Linux），按菜单选择旧人形和部署目录。macOS 去掉 sudo 并使用用户目录；Windows 使用 `-Wizard`。见[迁移向导](docs/migration.md#同机一键迁移向导)。

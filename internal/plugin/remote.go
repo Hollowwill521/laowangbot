@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ type RemoteFile struct {
 
 func trustedURL(raw string) bool {
 	u, e := url.Parse(raw)
-	return e == nil && u.Scheme == "https" && u.Host == "raw.githubusercontent.com" && u.User == nil && strings.HasPrefix(u.Path, "/OrionG-hub/laowangbot/")
+	return e == nil && u.Scheme == "https" && u.Host == "raw.githubusercontent.com" && u.User == nil && !strings.Contains(u.Path, "\\") && strings.HasPrefix(path.Clean(u.Path), "/OrionG-hub/laowangbot/")
 }
 func download(ctx context.Context, c *http.Client, raw string, max int64, restricted bool) ([]byte, error) {
 	if restricted && !trustedURL(raw) {
@@ -76,25 +77,26 @@ func (m Manager) InstallRemote(ctx context.Context, name string) error {
 	return m.installRemote(ctx, &http.Client{Timeout: 30 * time.Second}, CatalogURL, name, false, true)
 }
 func (m Manager) UpdateRemote(ctx context.Context, name string) error {
-	return m.installRemote(ctx, &http.Client{Timeout: 30 * time.Second}, CatalogURL, name, true, true)
+	return m.UpdateRemoteForce(ctx, name, false)
+}
+func (m Manager) UpdateRemoteForce(ctx context.Context, name string, force bool) error {
+	return m.installRemoteForce(ctx, &http.Client{Timeout: 30 * time.Second}, CatalogURL, name, true, true, force)
 }
 func (m Manager) installRemote(ctx context.Context, client *http.Client, catalogURL, name string, update, restricted bool) error {
+	return m.installRemoteForce(ctx, client, catalogURL, name, update, restricted, false)
+}
+func (m Manager) installRemoteForce(ctx context.Context, client *http.Client, catalogURL, name string, update, restricted, force bool) error {
 	dir, e := m.directory(name)
 	if e != nil {
 		return e
 	}
 	if update {
-		marker, e := os.ReadFile(filepath.Join(dir, remoteMarker))
-		if e != nil || string(marker) != catalogURL {
-			return errors.New("manual plugins cannot be remotely updated")
+		if err := checkRemoteUpdate(dir, catalogURL, force); err != nil {
+			return err
 		}
 	}
-	b, e := download(ctx, client, catalogURL, 1<<20, restricted)
+	catalog, e := fetchCatalog(ctx, client, catalogURL, restricted)
 	if e != nil {
-		return e
-	}
-	var catalog Catalog
-	if e = json.Unmarshal(b, &catalog); e != nil {
 		return e
 	}
 	var entry *CatalogEntry
@@ -123,7 +125,7 @@ func (m Manager) installRemote(ctx context.Context, client *http.Client, catalog
 	seen := map[string]bool{}
 	var total int
 	for _, file := range entry.Files {
-		if !filepath.IsLocal(file.Path) || strings.Contains(file.Path, "\\") || filepath.Clean(file.Path) == "manifest.json" || filepath.Clean(file.Path) == remoteMarker || seen[filepath.Clean(file.Path)] {
+		if !filepath.IsLocal(file.Path) || strings.Contains(file.Path, "\\") || filepath.Clean(file.Path) == "manifest.json" || reservedPath(filepath.ToSlash(filepath.Clean(file.Path))) || seen[filepath.Clean(file.Path)] {
 			return errors.New("invalid or duplicate remote path")
 		}
 		seen[filepath.Clean(file.Path)] = true
@@ -151,7 +153,7 @@ func (m Manager) installRemote(ctx context.Context, client *http.Client, catalog
 			return e
 		}
 	}
-	b, e = json.Marshal(entry.Manifest)
+	b, e := json.Marshal(entry.Manifest)
 	if e != nil {
 		return e
 	}
@@ -161,5 +163,16 @@ func (m Manager) installRemote(ctx context.Context, client *http.Client, catalog
 	if e = os.WriteFile(filepath.Join(stage, remoteMarker), []byte(catalogURL), 0600); e != nil {
 		return e
 	}
-	return m.installOwned(stage, update, catalogURL)
+	hashes, e := packageHashes(stage)
+	if e != nil {
+		return e
+	}
+	b, e = json.Marshal(hashes)
+	if e != nil {
+		return e
+	}
+	if e = os.WriteFile(filepath.Join(stage, hashMarker), b, 0600); e != nil {
+		return e
+	}
+	return m.installOwnedChecked(stage, update, catalogURL, force)
 }

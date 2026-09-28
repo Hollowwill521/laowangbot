@@ -17,3 +17,35 @@ Windows PowerShell 脚本和 Dockerfile 已进入 CI；本机没有 PowerShell�
 ## 发布前复核
 
 补充并通过回归测试：启动锁检查先于会话写入；备份和恢复拒绝 `data` 符号链接；运行实例固定插件代码及清单，更新后仅在重启时生效，插件状态继续写入原部署。Windows 测试不将 POSIX 权限位当作 ACL 验证。README 提供 `master` 分支的远程单条安装命令。
+
+## TPM 功能补齐验证
+
+新增搜索、详细列表、批量安装/更新/卸载、ZIP 导入导出及远程插件本地修改保护。不增加自定义源；手动插件不参与强制远程更新；运行实例保留启动快照，修改重启后生效。
+
+- `go test -count=1 -race ./...`：通过。
+- `go test -count=1 -tags=integration ./...`：通过，包含真实文件的 TPM 导出、卸载、保留状态、重新导入、跳过手动插件和注册命令流程。
+- `go test -count=1 -coverprofile=/tmp/tpm-final.cover ./...`：通过，全仓库覆盖率 **39.6%**。
+- `go vet ./...`：通过。
+- 插件管理包测试覆盖远程下载校验、修改/新增/删除文件保护、强制更新、并发修改复检、损坏清单恢复、ZIP 越界/重复路径/链接/大小与数量限制。
+
+真实 Telegram 回复文件下载和导出消息发送未联调；此次本地文件集成测试不代表真实账号网络验收。Windows/Linux 的服务部署和新 TPM 真机运行仍需目标环境验证。
+
+## 同机迁移向导验证
+
+`install.sh --wizard` / `install.ps1 -Wizard` 提供 mibot-lite、MiBox、TeleBox 选择，自动调用现有迁移和安装流程。无需手动复制配置、会话或数据。
+
+- `bash tests/deployment/migrate_wizard_test.sh`：通过，覆盖三种来源、空输入/取消、非空目标、源目录内目标、服务工作目录不符、启动中旧服务停止、迁移失败及新服务启动前失败恢复。
+- `bash tests/deployment/install_test.sh`：通过，原安装/更新/回滚行为回归通过。
+- `go test -count=1 -tags=integration ./...`：通过，真实二进制经向导搬迁并检查账号配置、别名数据和迁移报告。
+- 单元测试（含 race）、覆盖率检查和 `go vet ./...`：通过；Go 总体覆盖率 39.6%，不包含 Shell/PowerShell 行覆盖率。
+- Windows 向导测试已接入 CI；本机缺少 PowerShell，未执行。systemd 停止/恢复使用 mock，未操作真实 Linux 服务；真实 Telegram 登录连接未验证。
+
+## yvlu 动态贴纸空白修复
+
+根因是贴纸属性分支直接返回，未将媒体放入语录请求。已改为静态/WebM 贴纸直接嵌入，TGS 按需通过 Python rlottie/Pillow 渲染 RGBA PNG 帧，再用 ffmpeg 编码 VP9 WebM；转换错误明确返回，不静默降级或提交空媒体。
+
+- 单元测试、race、全套集成测试、覆盖率和 vet 通过；总体覆盖率 **39.8%**。
+- 在临时 Python 3.13 环境实际运行 rlottie-python 1.3.8、Pillow 12.3.0 和 ffmpeg 7.1。合成的移动图形 TGS 经转换后解码验证：尺寸、时长、多帧变化、透明背景、半透明颜色及取消操作均通过。
+- 通过模拟 Telegram 下载 RPC，验证 WebM/静态贴纸不被丢弃，以及实际 TGS 转换结果进入语录请求。
+- Windows amd64 交叉构建通过。Docker TGS 可选构建和 Windows/Linux 原生转换未在本机运行。
+- 未使用真实 Telegram 会话调用远端 quote 服务，最终线上语录回传仍未验证；本地合成 fixture 不代表对用户原贴纸的实际抓取或线上验收。

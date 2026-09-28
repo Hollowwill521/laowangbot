@@ -98,3 +98,9 @@ go vet ./...
 執行以下單元測試、整合測試及覆蓋率檢查。CI 設定與交叉編譯不代表目標平台已成功執行；Linux、Windows、Docker 真實部署與 Telegram 真實帳號仍待驗收，不將上游記憶體數字當成本專案實測。
 
 源自 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) 的 `dbc404a2323061c4abd7f13088622e1d045153fa`，本機分支為 `refactor/laowangbot`。保留原作者歸屬與 [LGPL-2.1](LICENSE)。Noto Sans SC 字型子集依 [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) 發布。
+
+## 外掛管理（TPM）
+
+`.tpm s 關鍵詞` 搜尋，`.tpm ls -v` 查看詳情，`.tpm i 名稱1 名稱2` 或 `.tpm i all` 安裝，`.tpm update` 批次更新，`.tpm rm 名稱` 解除安裝，`.tpm ul 名稱` 匯出 ZIP。回覆已適配的 ZIP 檔案並傳送 `.tpm i` 可手動安裝。遠端來源固定為本專案；手動外掛不自動更新，本機修改預設受保護，變更於重新啟動後生效。詳見[完整用法](docs/plugins.md#tpm-命令)。
+
+同機遷移不需複製設定：Linux 執行 `sudo bash scripts/install.sh --wizard --root /opt/laowangbot`，依選單選擇舊人形和部署目錄。macOS 移除 sudo 並使用使用者目錄；Windows 使用 `-Wizard`。詳見[遷移精靈](docs/migration.md#同机一键迁移向导)。

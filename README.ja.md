@@ -98,3 +98,9 @@ go vet ./...
 以下の単体・統合テストとカバレッジ確認を実行します。CI 定義やクロスコンパイルだけでは対象環境の動作を保証できません。Linux、Windows、Docker の実配備と Telegram 実アカウントの検証は未完了です。上流のメモリ使用量を本プロジェクトの測定値として扱いません。
 
 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) の `dbc404a2323061c4abd7f13088622e1d045153fa` を起点とし、ローカルブランチは `refactor/laowangbot` です。元の著作者表示と [LGPL-2.1](LICENSE) を維持します。Noto Sans SC のサブセットは [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) で配布されます。
+
+## プラグイン管理（TPM）
+
+`.tpm s キーワード` で検索、`.tpm ls -v` で詳細表示、`.tpm i 名前1 名前2` または `.tpm i all` でインストール、`.tpm update` で一括更新、`.tpm rm 名前` で削除、`.tpm ul 名前` で ZIP を出力します。対応済み ZIP に返信して `.tpm i` を送ると手動導入できます。配布元は本プロジェクトに固定し、手動プラグインは自動更新しません。ローカル変更は既定で保護され、変更は再起動後に反映されます。[詳細](docs/plugins.md#tpm-命令)。
+
+同じサーバーから移行する場合、Linux では `sudo bash scripts/install.sh --wizard --root /opt/laowangbot` を実行し、旧ボットと配備先ディレクトリを選択します。設定の手動コピーは不要です。macOS は sudo を省略してユーザーディレクトリを使い、Windows は `-Wizard` を指定します。[移行ウィザード](docs/migration.md#同机一键迁移向导)。

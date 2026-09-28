@@ -85,6 +85,9 @@ Windows 不支持 Telegram 内直接替换正在运行的程序；`.update run` 
 
 ## 5. 从现有部署安装
 
+推荐使用迁移向导：Linux 执行 `sudo bash scripts/install.sh --wizard --root /opt/laowangbot`；macOS 执行 `bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"`；Windows 使用 `-Wizard`。选择旧人形和目录后自动搬迁，无需复制配置。详见[同机迁移向导](docs/migration.md#同机一键迁移向导)。
+
+
 停止旧实例，并选择一个空目标目录：
 
 ```sh
@@ -127,3 +130,25 @@ docker run -d --name laowangbot --restart unless-stopped   -v laowangbot-data:/d
 ### 可选测速工具
 
 Linux 可以按已有校验值下载 Ookla CLI；macOS/Windows 请先手动安装对应平台的 `speedtest` 并加入 PATH。部分系统资源指标仍只在 Linux 可用，其他系统显示未知或零值。
+
+## yvlu 动态贴纸
+
+WebM 视频贴纸可直接嵌入语录，无需转码。TGS 动画需要 **ffmpeg、Python 3、rlottie-python 和 Pillow**，仅处理 TGS 时按需启动，不增加常驻 Node.js 运行时。
+
+Linux 示例（依赖安装好后重启 laowangbot）：
+
+```sh
+sudo apt-get install -y ffmpeg python3 python3-venv
+sudo python3 -m venv /opt/laowangbot-tgs
+sudo /opt/laowangbot-tgs/bin/pip install rlottie-python==1.3.8 Pillow==12.3.0
+sudo mkdir -p /etc/systemd/system/laowangbot.service.d
+printf '[Service]\nEnvironment=LAOWANGBOT_PYTHON=/opt/laowangbot-tgs/bin/python\n' | sudo tee /etc/systemd/system/laowangbot.service.d/tgs.conf
+sudo systemctl daemon-reload
+sudo systemctl restart laowangbot
+```
+
+macOS/Windows 也可在独立 Python 虚拟环境中安装这两个包，并为运行 laowangbot 的进程设置 `LAOWANGBOT_PYTHON` 为对应 Python 可执行文件的绝对路径；ffmpeg 需在系统 PATH 中。此变量读取进程环境，单写入 laowangbot 的 `.env` 不生效。
+
+Docker 按需启用：`docker build --build-arg WITH_TGS=true -t laowangbot:local .`。
+
+TGS 经 PNG 帧保留透明度，再转为动态 WebM。缺依赖、下载失败或转换失败会明确报错，不会生成空白贴纸或静默替换为静态图。贴纸输入限制 8 MiB；TGS 压缩及解压 JSON 各最多 1 MiB，画布最大 512×512、时长最多 3 秒，输出采样最高 30 fps，不支持依赖外部图片资源的 Lottie。

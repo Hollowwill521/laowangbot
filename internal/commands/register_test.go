@@ -13,18 +13,23 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/app"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/sudo"
+	"github.com/OrionG-hub/laowangbot/internal/extensions"
 )
 
 // 表里写的命令都得真的存在；拼错了就等于悄悄少借出去一个。
 func TestDelegableNamesExist(t *testing.T) {
 	a := &app.App{Root: t.TempDir(), Registry: command.New([]string{"."}, slog.New(slog.NewTextHandler(io.Discard, nil)))}
 	RegisterAll(a)
+	defer a.Close()
+	if err := extensions.Register(a); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range sudo.Delegable() {
 		if _, ok := a.Registry.Lookup(name); !ok {
 			t.Errorf("delegable 里的 %q 不是已注册的命令", name)
 		}
 	}
-	for _, ownerOnly := range []string{"sudo", "sure", "dme", "da", "acn", "autochangename", "prefix", "alias", "bf", "log", "save", "restart", "update", "sb", "unsb", "sysinfo", "refresh", "aban"} {
+	for _, ownerOnly := range []string{"tpm", "sudo", "sure", "dme", "da", "acn", "autochangename", "prefix", "alias", "bf", "log", "save", "restart", "update", "sb", "unsb", "sysinfo", "refresh", "aban"} {
 		if slices.Contains(sudo.Delegable(), ownerOnly) {
 			t.Errorf("%q 不该能借出去", ownerOnly)
 		}

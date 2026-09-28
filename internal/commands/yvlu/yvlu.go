@@ -742,7 +742,9 @@ func (s *yvluService) build(ctx context.Context, inv *command.Invocation, reply 
 		// 伪造的文字不是这条消息说的，它的媒体和转发来源也就不该出现；
 		// 头衔属于作者，和原插件一样照样显示。
 		if !fake {
-			s.describeMedia(ctx, inv, message, &item)
+			if err := s.describeMedia(ctx, inv, message, &item); err != nil {
+				return nil, err
+			}
 			if label := forwardLabel(inv, message); label != nil {
 				item.Forward = label
 			}
@@ -1000,15 +1002,15 @@ func avatarKey(inv *command.Invocation, peer tg.InputPeerClass) string {
 
 // describeMedia 附上被引用消息携带的媒体：图片直接嵌入，视频转码，
 // 其余的只做文字描述。
-func (s *yvluService) describeMedia(ctx context.Context, inv *command.Invocation, message *bot.Message, item *quoteMessage) {
+func (s *yvluService) describeMedia(ctx context.Context, inv *command.Invocation, message *bot.Message, item *quoteMessage) error {
 	if message.Raw == nil {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, mediaBudget)
 	defer cancel()
 	media, ok := message.Raw.GetMedia()
 	if !ok {
-		return
+		return nil
 	}
 	switch value := media.(type) {
 	case *tg.MessageMediaPhoto:
@@ -1027,10 +1029,11 @@ func (s *yvluService) describeMedia(ctx context.Context, inv *command.Invocation
 	case *tg.MessageMediaDocument:
 		document, ok := value.Document.(*tg.Document)
 		if !ok {
-			return
+			return nil
 		}
-		s.describeDocument(ctx, inv, message, document, item)
+		return s.describeDocument(ctx, inv, message, document, item)
 	}
+	return nil
 }
 
 // webPagePhoto 把链接预览里的图片包装成一条照片消息，好交给 DownloadMedia；
@@ -1055,7 +1058,7 @@ func webPagePhoto(message *tg.Message, preview *tg.MessageMediaWebPage) (*tg.Mes
 	return wrapped, true
 }
 
-func (s *yvluService) describeDocument(ctx context.Context, inv *command.Invocation, message *bot.Message, document *tg.Document, item *quoteMessage) {
+func (s *yvluService) describeDocument(ctx context.Context, inv *command.Invocation, message *bot.Message, document *tg.Document, item *quoteMessage) error {
 	var sticker, animated bool
 	var video *tg.DocumentAttributeVideo
 	var audio *tg.DocumentAttributeAudio
@@ -1076,8 +1079,7 @@ func (s *yvluService) describeDocument(ctx context.Context, inv *command.Invocat
 	}
 	switch {
 	case sticker:
-		// 贴纸本身就是语录的输出格式；再嵌入贴纸就成了贴纸套贴纸。
-		return
+		return s.embedSticker(ctx, inv, message, document, item)
 	case audio != nil && !audio.Voice:
 		title := audio.Title
 		if title == "" {
@@ -1089,7 +1091,7 @@ func (s *yvluService) describeDocument(ctx context.Context, inv *command.Invocat
 		item.Audio = &quoteAudio{Title: title, Performer: audio.Performer, Duration: audio.Duration}
 	case audio != nil && audio.Voice:
 		if len(audio.Waveform) == 0 {
-			return
+			return nil
 		}
 		waveform := make([]int, 0, len(audio.Waveform))
 		for _, sample := range audio.Waveform {
@@ -1112,6 +1114,7 @@ func (s *yvluService) describeDocument(ctx context.Context, inv *command.Invocat
 	default:
 		item.Document = &quoteDoc{FileName: fileName}
 	}
+	return nil
 }
 
 // embedVideo 把短动画转码，让语录里能显示会动的画面。这里失败并不致命：
@@ -1120,8 +1123,10 @@ func (s *yvluService) embedVideo(ctx context.Context, inv *command.Invocation, m
 	if document.Size > 8<<20 {
 		return
 	}
-	if _, err := media.FFmpeg(); err != nil {
-		return
+	if document.MimeType != "video/webm" {
+		if _, err := media.FFmpeg(); err != nil {
+			return
+		}
 	}
 	file, err := inv.Client.DownloadMedia(ctx, message.Raw, 8<<20)
 	if err != nil {

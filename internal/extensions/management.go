@@ -2,44 +2,67 @@ package extensions
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"strings"
+	"time"
+
 	"github.com/OrionG-hub/laowangbot/internal/app"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
-	"strings"
 )
 
 func registerManagement(a *app.App, m plugin.Manager) {
-	a.Registry.Register(&command.Command{Name: "tpm", Description: "管理 laowangbot 独立进程插件", Usage: "list|install 名称|update 名称|local 路径|replace 路径", Handle: func(ctx context.Context, inv *command.Invocation) error {
-		var err error
-		switch inv.Arg(0) {
-		case "", "list", "ls":
-			items, e := m.List()
+	a.Registry.Register(&command.Command{Name: "tpm", Description: "搜索、安装、更新、卸载和导出插件", Usage: "search|ls|i|update|rm|upload|local|replace", Timeout: 15 * time.Minute, Help: func(p string) string { return command.Escape(tpmHelp(p)) }, Handle: func(ctx context.Context, inv *command.Invocation) error {
+		if len(inv.Args) == 0 || strings.EqualFold(inv.Arg(0), "help") || inv.Arg(0) == "h" {
+			return inv.EditText(ctx, tpmHelp(inv.Prefix))
+		}
+		var last time.Time
+		r, e := executeTPM(ctx, m, inv.Args, func(text string) error {
+			if time.Since(last) < time.Second {
+				return nil
+			}
+			last = time.Now()
+			return inv.EditText(ctx, text)
+		})
+		if e != nil {
+			return e
+		}
+		if r.ImportReply {
+			reply, e := inv.Client.GetReply(ctx, inv.Message)
 			if e != nil {
 				return e
 			}
-			var rows []string
-			for _, v := range items {
-				rows = append(rows, fmt.Sprintf("%s %s (%s)", v.Name, v.Version, strings.Join(v.Commands, ", ")))
+			if reply == nil || reply.Raw == nil {
+				return errors.New("请回复适配 laowangbot 的 ZIP 插件包，再发送 tpm i")
 			}
-			if len(rows) == 0 {
-				rows = append(rows, "未安装外部插件；内置命令通过 update 更新")
+			file, e := inv.Client.DownloadMedia(ctx, reply.Raw, plugin.MaxPackageSize+(1<<20))
+			if e != nil {
+				return e
 			}
-			return inv.EditText(ctx, strings.Join(rows, "\n"))
-		case "install":
-			err = m.InstallRemote(ctx, inv.Arg(1))
-		case "update":
-			err = m.UpdateRemote(ctx, inv.Arg(1))
-		case "local":
-			err = m.InstallLocal(inv.Rest(1))
-		case "replace":
-			err = m.ReplaceLocal(inv.Rest(1))
-		default:
-			return inv.EditText(ctx, "用法：tpm list|install 名称|update 名称|local 路径|replace 路径")
+			name, e := m.ImportPackage(file.Data, false)
+			if e != nil {
+				return e
+			}
+			r.Text = "已安装手动插件 " + name + "；重启后生效。旧 TypeScript 代码必须先适配 laowangbot 协议。"
 		}
-		if err != nil {
-			return err
+		if r.File != nil {
+			peer, e := inv.Client.InputPeer(inv.Message.Peer)
+			if e != nil {
+				return e
+			}
+			return inv.Client.SendDocument(ctx, peer, r.FileName, "application/zip", r.File, r.Text, inv.Message.ID)
 		}
-		return inv.EditText(ctx, "插件已安装。执行 restart 后生效；旧 TypeScript 插件需先按 laowangbot 协议适配。")
+		for i, page := range command.EscapedPages(r.Text, 3500) {
+			var e error
+			if i == 0 {
+				e = inv.Edit(ctx, page)
+			} else {
+				e = inv.Reply(ctx, page)
+			}
+			if e != nil {
+				return e
+			}
+		}
+		return nil
 	}})
 }

@@ -35,5 +35,15 @@ func main(){
   try { & $installer -NoService -Binary $fixture -Root $root } catch { $rejected = $true }
   if (!$rejected) { throw 'Failed check accepted' }
   if ((Get-FileHash (Join-Path $root 'laowangbot.exe')).Hash -ne $before) { throw 'Failed check changed binary' }
+  # Feed the wizard choices without changing the user's real scheduled tasks.
+  $global:MigrationAnswers = [Collections.Generic.Queue[string]]::new()
+  foreach ($answer in @('3', $source, 'y')) { $global:MigrationAnswers.Enqueue($answer) }
+  function global:Read-Host { param([string]$Prompt) if ($global:MigrationAnswers.Count -eq 0) { throw 'unexpected prompt' }; $global:MigrationAnswers.Dequeue() }
+  try {
+    $wizardRoot = Join-Path $work 'wizard-root'
+    & $installer -Wizard -NoService -Binary $fixture -Root $wizardRoot
+    if (!(Test-Path (Join-Path $wizardRoot 'config.json'))) { throw 'Wizard did not migrate configuration' }
+    if ((Get-Content (Join-Path $wizardRoot 'config.json') -Raw) -ne (Get-Content (Join-Path $source 'config.json') -Raw)) { throw 'Wizard changed source configuration' }
+  } finally { Remove-Item Function:\Read-Host; Remove-Variable MigrationAnswers -Scope Global }
   Write-Host 'Windows offline migration/update/rollback tests passed'
 } finally { Remove-Item $work -Recurse -Force }

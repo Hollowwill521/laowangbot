@@ -98,3 +98,9 @@ go vet ./...
 Run unit tests, integration tests and coverage checks as shown below. CI definitions and cross-compilation do not prove target-platform runtime success. Live Linux/Windows/Docker deployment and real Telegram account checks still need validation; no upstream memory figures are claimed as current measurements.
 
 Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit `dbc404a2323061c4abd7f13088622e1d045153fa`, on local branch `refactor/laowangbot`. Original attribution and [LGPL-2.1](LICENSE) are retained. The Noto Sans SC subset uses [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt).
+
+## Plugin manager (TPM)
+
+Use `.tpm s keyword` to search, `.tpm ls -v` for details, `.tpm i name1 name2` or `.tpm i all` to install, `.tpm update` to update remote plugins, `.tpm rm name` to uninstall, and `.tpm ul name` to export ZIP. Reply to an adapted ZIP package with `.tpm i` to install manually. The source stays fixed to this project. Manual plugins are never remotely updated, local changes are protected by default, and changes take effect after restart. See the [TPM guide](docs/plugins.md#tpm-命令).
+
+For same-server migration, run `sudo bash scripts/install.sh --wizard --root /opt/laowangbot` on Linux and select your old bot and deployment directory. No manual configuration copying is required. On macOS omit sudo and use a user directory; Windows uses `-Wizard`. See the [migration wizard](docs/migration.md#同机一键迁移向导).

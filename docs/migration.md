@@ -4,7 +4,30 @@
 
 支持从 mibot-lite、MiBox、TeleBox 部署导入账号、会话和已知配置。迁移不是任意旧插件的自动转译；保留文件与功能可运行是两件事。
 
-## 操作步骤
+## 同机一键迁移向导
+
+在源码目录运行以下命令，按提示选择旧人形和旧目录，无需手动复制任何配置：
+
+```sh
+# Linux（systemd，新目标目录应为空）
+sudo bash scripts/install.sh --wizard --root /opt/laowangbot
+
+# macOS（当前用户 launchd）
+bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
+```
+
+```powershell
+# Windows（当前用户登录计划任务）
+.\scripts\install.ps1 -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
+```
+
+向导依次询问：①旧人形 `mibot-lite` / `MiBox` / `TeleBox`；②包含 `config.json` 的旧部署目录；③旧实例停止方式。Linux 选择 `systemd` 后输入服务名，脚本验证该服务的工作目录与旧目录一致，再停止服务。其他方式选择 `manual`，停止旧 Docker/PM2/后台实例后输入 `y`。脚本不会搜索、终止无关进程。
+
+脚本自动下载并校验 laowangbot，迁移配置、会话、已支持数据和插件清单，检查新部署并安装后台任务。旧目录保留；无法直接运行的旧插件归档在 `legacy/`，需自行适配代码。失败时尝试恢复由脚本停止的旧 systemd 服务；无法确认新服务已经停止时，不启动旧服务，避免双实例运行。成功后旧 systemd 服务保持停止，其开机自启动配置不会被修改，请避免重启服务器后自动启动旧实例。
+
+本机已有二进制时可加 `--binary /path/to/laowangbot`（Windows 为 `-Binary`），无人值守沿用 `--migrate 旧目录 --from 类型`。向导目前是本地待发布修改；发布新脚本后，远程单条命令在原安装命令末尾加 `--wizard` / `-Wizard` 即可。
+
+## 手动指定参数（可用于自动化）
 
 1. 停止旧机器人，备份部署目录；SQLite 如使用 WAL，先正常关闭并完成 checkpoint，避免最新数据仍只在 WAL 文件中。
 2. 使用空的、独立的新目标目录；不能覆盖现有部署，也不要放在源目录内部。

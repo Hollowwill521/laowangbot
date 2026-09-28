@@ -27,6 +27,7 @@ var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 type Manifest struct {
 	Name            string   `json:"name"`
+	Description     string   `json:"description,omitempty"`
 	Version         string   `json:"version"`
 	ProtocolVersion int      `json:"protocol_version"`
 	Executable      string   `json:"executable"`
@@ -95,7 +96,7 @@ func validate(v Manifest) error {
 	}
 	return nil
 }
-func readManifest(dir string) (Manifest, error) {
+func readManifestDefinition(dir string) (Manifest, error) {
 	var v Manifest
 	f, e := os.Open(filepath.Join(dir, "manifest.json"))
 	if e != nil {
@@ -119,6 +120,13 @@ func readManifest(dir string) (Manifest, error) {
 		return v, errors.New("manifest has trailing data")
 	}
 	if e = validate(v); e != nil {
+		return v, e
+	}
+	return v, nil
+}
+func readManifest(dir string) (Manifest, error) {
+	v, e := readManifestDefinition(dir)
+	if e != nil {
 		return v, e
 	}
 	e = filepath.WalkDir(dir, func(p string, entry os.DirEntry, err error) error {
@@ -177,6 +185,11 @@ func (m Manager) List() ([]Manifest, error) {
 		return nil, e
 	}
 	defer lock.Close()
+	return m.list()
+}
+
+// list requires the installation transaction lock.
+func (m Manager) list() ([]Manifest, error) {
 	entries0, _ := os.ReadDir(filepath.Join(m.Root, "plugins"))
 	for _, entry := range entries0 {
 		if strings.HasPrefix(entry.Name(), ".previous-") {
@@ -208,16 +221,16 @@ func (m Manager) List() ([]Manifest, error) {
 
 // InstallLocal copies a complete directory. Local installs are never remotely updated.
 func (m Manager) InstallLocal(source string) error {
-	if _, err := os.Lstat(filepath.Join(source, remoteMarker)); !os.IsNotExist(err) {
-		return errors.New("reserved catalog marker in local plugin")
+	if err := rejectMetadata(source); err != nil {
+		return err
 	}
 	return m.install(source, false)
 }
 
 // ReplaceLocal explicitly replaces an installed plugin with a manually maintained copy.
 func (m Manager) ReplaceLocal(source string) error {
-	if _, err := os.Lstat(filepath.Join(source, remoteMarker)); !os.IsNotExist(err) {
-		return errors.New("reserved catalog marker in local plugin")
+	if err := rejectMetadata(source); err != nil {
+		return err
 	}
 	return m.install(source, true)
 }
@@ -241,6 +254,9 @@ func (m Manager) transactionLock() (*os.File, error) {
 	return platform.LockRoot(dir)
 }
 func (m Manager) installOwned(source string, replace bool, expectedCatalog string) error {
+	return m.installOwnedChecked(source, replace, expectedCatalog, false)
+}
+func (m Manager) installOwnedChecked(source string, replace bool, expectedCatalog string, force bool) error {
 	installMu.Lock()
 	defer installMu.Unlock()
 	lock, e := m.transactionLock()
@@ -258,12 +274,6 @@ func (m Manager) installOwned(source string, replace bool, expectedCatalog strin
 	target, e := m.directory(v.Name)
 	if e != nil {
 		return e
-	}
-	if expectedCatalog != "" && replace {
-		marker, err := os.ReadFile(filepath.Join(target, remoteMarker))
-		if err != nil || string(marker) != expectedCatalog {
-			return errors.New("manual plugins cannot be remotely updated")
-		}
 	}
 	base := filepath.Dir(target)
 	if e = os.MkdirAll(base, 0700); e != nil {
@@ -283,6 +293,12 @@ func (m Manager) installOwned(source string, replace bool, expectedCatalog strin
 	}
 	if _, e = readManifest(stage); e != nil {
 		return e
+	}
+	// Recheck ownership and edits after staging, while all package mutations are locked.
+	if expectedCatalog != "" && replace {
+		if e = checkRemoteUpdate(target, expectedCatalog, force); e != nil {
+			return e
+		}
 	}
 	backup := filepath.Join(base, ".previous-"+v.Name)
 	if replace {

@@ -47,6 +47,20 @@ func TestBuiltCLIMigrationBackupAndPlugins(t *testing.T) {
 	os.WriteFile(filepath.Join(old, "config.json"), raw, 0600)
 	os.Mkdir(filepath.Join(old, "data"), 0700)
 	os.WriteFile(filepath.Join(old, "data/alias.json"), []byte(`{"aliases":{"p":"ping"}}`), 0600)
+	if runtime.GOOS != "windows" {
+		wizardRoot := filepath.Join(root, "wizard")
+		cmd := exec.Command("bash", filepath.Join(repo, "scripts/install.sh"), "--wizard", "--no-service", "--binary", binary, "--root", wizardRoot)
+		cmd.Stdin = strings.NewReader("1\n" + old + "\nmanual\ny\n")
+		if b, e := cmd.CombinedOutput(); e != nil {
+			t.Fatalf("migration wizard: %v\n%s", e, b)
+		}
+		for _, name := range []string{"config.json", "data/alias.json", "migration-report.json"} {
+			if _, e := os.Stat(filepath.Join(wizardRoot, name)); e != nil {
+				t.Fatal(e)
+			}
+		}
+		run("--check", "--root", wizardRoot)
+	}
 	dest := filepath.Join(root, "new")
 	run("--migrate", old, "--from", "mibot-lite", "--root", dest)
 	run("--check", "--root", dest)
