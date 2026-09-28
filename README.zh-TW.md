@@ -118,6 +118,6 @@ go vet ./...
 
 ## 外掛管理（TPM）
 
-外掛安裝、更新及移除會重新編譯主程式，需要 Go 和 Git。Windows 尚不支援自動建置替換，需外部建置後停止服務，手動替換二進位檔及相符的原始碼快照。
+自 0.1.8 起，官方程式內建 `monitor`、`qdsg`，直接使用 `.monitor`、`.qdsg`，無需本機 Go 編譯。設定仍保留於 `state/monitor`、`state/qdsg`；本機 OCR 仍需選用的 Python 相依套件。
 
-`.tpm s 關鍵詞` 搜尋，`.tpm ls -v` 查看詳情，`.tpm i 名稱1 名稱2` 或 `.tpm i all` 安裝，`.tpm update` 批次更新，`.tpm rm 名稱` 解除安裝，`.tpm ul 名稱` 匯出 ZIP。回覆已適配的 ZIP 檔案並傳送 `.tpm i` 可手動安裝。遠端來源固定為本專案；手動外掛不自動更新，本機修改預設受保護，變更於重新啟動後生效。詳見[完整用法](docs/plugins.md#tpm-命令)。
+TPM 原始碼安裝、更新、移除、匯入和替換暫時停用。`.tpm ls -v` 查看外掛，`.tpm s 關鍵詞` 搜尋，`.tpm ul 名稱` 匯出既有外部原始碼。內建外掛隨 `.update run` 更新主程式；既有自訂原始碼外掛保留原實作與原始碼更新方式。詳見[說明](docs/plugins.md)。

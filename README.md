@@ -121,6 +121,6 @@ bash scripts/build.sh
 
 ## 插件管理（TPM）
 
-插件安装、更新和卸载会重新编译宿主，需要 Go 和 Git。Windows 暂不支持自动构建替换，需外部构建后停止服务，手动替换二进制及匹配的源码快照。
+从 0.1.8 起，`monitor`、`qdsg` 随官方程序内置，直接使用 `.monitor`、`.qdsg`；安装和升级无需本地 Go 编译。配置继续保存在 `state/monitor`、`state/qdsg`。本地 OCR 仍按需使用 Python 依赖。
 
-`.tpm s 关键词` 搜索，`.tpm ls -v` 查看详情，`.tpm i 名称1 名称2` 或 `.tpm i all` 安装，`.tpm update` 批量更新，`.tpm rm 名称` 卸载，`.tpm ul 名称` 导出 ZIP。回复适配后的 ZIP 文件发送 `.tpm i` 可手动安装。远程源固定为本项目；手动插件不自动更新，本地修改默认受保护，变更重启后生效。见[完整用法](docs/plugins.md#tpm-命令)。
+TPM 源码安装、更新、卸载、导入和替换暂时禁用。`.tpm ls -v` 查看内置及外部插件，`.tpm s 关键词` 搜索，`.tpm ul 名称` 导出已有外部源码。内置插件通过 `.update run` 随主程序更新；已有手动源码插件仍保留原版本及源码更新路径。见[完整说明](docs/plugins.md)。

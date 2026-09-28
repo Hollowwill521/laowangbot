@@ -1,6 +1,6 @@
 # Monitor 1.0.0
 
-Go 源码插件（协议 v2，安装时编译进 laowangbot），源自用户提供的 `monitor.ts`（AyuGram Monitor V3.21，1395 行）。不需要 Node、Python 或原 TypeScript 运行时。入口 `Open`，使用宿主 pluginapi 接口；`cmd/plugin-monitor` 仅作兼容开发入口。
+官方内置插件（自 laowangbot 0.1.8 起，无需本地安装或编译），源自用户提供的 `monitor.ts`（AyuGram Monitor V3.21，1395 行）。不需要 Node、Python 或原 TypeScript 运行时。入口 `Open`，使用宿主 pluginapi 接口；`cmd/plugin-monitor` 仅作兼容开发入口。
 
 ## 功能核对
 

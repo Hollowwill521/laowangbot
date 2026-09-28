@@ -1,6 +1,6 @@
 # qdsg 1.0.0
 
-从用户提供的 qdsg.ts（4164 行，AyuGram Desktop 导出）移植。Go 源码插件（协议 v2，安装时编译进 laowangbot），无 Node；仅本地 OCR 按需启动 Python。原配置 signin_config.json 字段名保留，同机迁移向导会将旧文件自动放入插件状态目录。配置含 API 密钥，文件权限 0600，不应提交 Git。
+从用户提供的 qdsg.ts（4164 行，AyuGram Desktop 导出）移植。官方内置插件（自 laowangbot 0.1.8 起，无需本地安装或编译），无 Node；仅本地 OCR 按需启动 Python。原配置 signin_config.json 字段名保留，同机迁移向导会将旧文件自动放入插件状态目录。配置含 API 密钥，文件权限 0600，不应提交 Git。
 
 ## 命令
 

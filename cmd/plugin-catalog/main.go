@@ -63,6 +63,10 @@ func generate(root, tag string) (catalog, error) {
 		return c, err
 	}
 	for _, child := range children {
+		// These implementations ship in every official binary, not as source installs.
+		if child.Name() == "monitor" || child.Name() == "qdsg" {
+			continue
+		}
 		if child.IsDir() && !strings.HasPrefix(child.Name(), ".") {
 			dirs = append(dirs, filepath.ToSlash(filepath.Join("plugins", child.Name())))
 		}

@@ -19,6 +19,9 @@ func (m managedTPM) UpdateRemoteForce(ctx context.Context, name string, force bo
 	}
 	for _, item := range items {
 		if item.Manifest.Name == name {
+			if item.Source == bundledSource {
+				return fmt.Errorf("%s 已内置，请使用 .update run 更新主程序，无需编译安装", name)
+			}
 			if item.Source != plugin.CatalogURL {
 				return fmt.Errorf("%s 是手动插件，请使用 tpm replace 更新", name)
 			}
@@ -39,4 +42,26 @@ func (m managedTPM) Batch(ctx context.Context, apply func(tpmManager) (bool, err
 	}
 	_, err := apply(m)
 	return err
+}
+
+func (m managedTPM) InstallRemote(ctx context.Context, name string) error {
+	for _, entry := range bundledEntries(nil) {
+		if entry.Manifest.Name == name {
+			return fmt.Errorf("%s 已内置，可直接使用 .%s，无需安装", name, name)
+		}
+	}
+	return m.tpmManager.InstallRemote(ctx, name)
+}
+
+func (m managedTPM) Remove(name string) error {
+	items, err := m.Installed()
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if item.Manifest.Name == name && item.Source == bundledSource {
+			return fmt.Errorf("%s 为内置插件，无需卸载源码；请在插件命令中停用对应任务或规则", name)
+		}
+	}
+	return m.tpmManager.Remove(name)
 }

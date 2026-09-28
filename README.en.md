@@ -118,6 +118,6 @@ Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit
 
 ## Plugin manager (TPM)
 
-Installing, updating or removing plugins rebuilds the host and requires Go and Git. Windows does not support automatic source rebuilding and replacement; build externally, stop the service, then manually replace the binary and its matching source snapshot.
+Since 0.1.8, official binaries include `monitor` and `qdsg`. Use `.monitor` and `.qdsg` directly, with no local Go compilation. State remains in `state/monitor` and `state/qdsg`; local OCR still needs its optional Python dependencies.
 
-Use `.tpm s keyword` to search, `.tpm ls -v` for details, `.tpm i name1 name2` or `.tpm i all` to install, `.tpm update` to update remote plugins, `.tpm rm name` to uninstall, and `.tpm ul name` to export ZIP. Reply to an adapted ZIP package with `.tpm i` to install manually. The source stays fixed to this project. Manual plugins are never remotely updated, local changes are protected by default, and changes take effect after restart. See the [TPM guide](docs/plugins.md#tpm-命令).
+TPM source installation, updates, removal, import and replacement are temporarily disabled. Use `.tpm ls -v` to inspect plugins, `.tpm s keyword` to search, and `.tpm ul name` to export existing external source. Bundled plugins update with `.update run`; existing custom source plugins retain their implementation and source-update path. See the [guide](docs/plugins.md).

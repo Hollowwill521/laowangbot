@@ -62,7 +62,7 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 
 `migration-report.json` 记录文件、来源类型、插件状态、转换日志和警告。识别为现有内建命令的旧插件使用 Go 内建实现，更新随当前项目主程序；未知插件标记 `needs-adaptation`。旧远程来源只作为历史信息保留，不继续从旧仓库更新。
 
-手工适配后安装独立进程插件（CLI 操作前停止机器人；运行中使用 `.tpm`）：
+旧外部源码插件的 CLI 维护入口（先停止机器人；TPM 源码写入暂时禁用）：
 
 ```sh
 ./laowangbot --plugin install-local --plugin-source /path/to/adapted-plugin --root /path/to/new-laowangbot
@@ -70,7 +70,7 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 ./laowangbot --plugin list --root /path/to/new-laowangbot
 ```
 
-Telegram 对应 `.tpm local 路径`、`.tpm replace 路径`、`.tpm list`。安装/替换后重启加载；显式本地替换将插件改为手工维护。远程 `.tpm install 名称` / `.tpm update 名称` 仅读取 `OrionG-hub/laowangbot` 的 `master` 分支目录。当前远程目录提供 `monitor` 和 `qdsg`。
+官方程序已内置 `monitor` 和 `qdsg`，迁移配置后直接使用相应命令。TPM 源码安装、替换、更新及卸载暂时禁用，`.tpm list` 可查看内置及已有外部插件。
 
 ## 兼容依据与回退
 

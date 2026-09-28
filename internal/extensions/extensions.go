@@ -27,11 +27,13 @@ var commandName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
 // Register validates the complete namespace before registering any plugin.
 // Installing or replacing a plugin takes effect after restart.
-func Register(a *app.App) error { return registerEntries(a, compiled.Entries()) }
+func Register(a *app.App) error { return registerEntries(a, bundledEntries(compiled.Entries())) }
 
 // ValidateCompiled checks linked manifests and the command namespace without
 // constructing plugins, touching state, or connecting to Telegram.
-func ValidateCompiled(a *app.App) error { return validateEntries(a, compiled.Entries()) }
+func ValidateCompiled(a *app.App) error {
+	return validateEntries(a, bundledEntries(compiled.Entries()))
+}
 
 var pluginName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 

@@ -33,8 +33,9 @@ type tpmResult struct {
 }
 
 func tpmHelp(prefix string) string {
-	return "📦 laowangbot 插件管理器\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件\n" + prefix + "tpm ls/list [-v] 或 lv：已安装插件及来源\n" + prefix + "tpm i/install 名称…|all：下载源码并编译进主程序\n" + prefix + "tpm i：回复 Go 源码 ZIP 包编译安装\n" + prefix + "tpm update/ua [名称…] [-f]：更新远程插件，省略名称更新全部\n" + prefix + "tpm rm/remove/uninstall/un 名称…|all：卸载代码，保留数据\n" + prefix + "tpm upload/ul 名称：导出 ZIP 插件包（不含状态）\n" + prefix + "tpm local 路径 / replace 路径：手动安装 / 替换\n\n远程源固定为当前项目；手动插件不参与远程更新。修改过的远程插件默认跳过，-f 才覆盖。安装、更新、卸载都会重新编译主程序；批量安装先准备源码，再统一编译一次，编译失败整批不生效。进度显示阶段、耗时与当前编译包，成功后自动重启（无重启组件时请手动重启）。需 Go（版本满足主项目 go.mod）、Git 与依赖下载网络；首次编译较慢。首次可通过 LAOWANGBOT_SOURCE 指定本地项目源码；否则获取当前版本标签源码。\n主程序更新：使用 " + prefix + "update check 检查，再用 " + prefix + "update run 获取新版源码，保留当前插件源码一起编译；失败保留旧程序。手动插件更新用 tpm replace 路径。仅接受 protocol_version=2 的 Go 源码包，旧可执行文件/TS 包必须迁移。Windows 暂不支持源码自编译替换，需外部构建后停止服务手动替换。"
+	return "📦 laowangbot 插件管理器\n\nmonitor、qdsg 已内置，可直接使用 " + prefix + "monitor / " + prefix + "qdsg；无需安装或本地编译，随主程序更新。\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件目录\n" + prefix + "tpm ls/list [-v] 或 lv：查看内置和外部插件\n" + prefix + "tpm upload/ul 名称：导出已有外部插件源码包\n\nTPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。\n升级主程序：" + prefix + "update check / " + prefix + "update run。只有内置插件时下载官方二进制；保留既有外部源码插件的部署仍需源码构建。"
 }
+
 func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(string) error) (tpmResult, error) {
 	if len(args) == 0 {
 		return tpmResult{Text: tpmHelp(".")}, nil
@@ -73,7 +74,9 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 		rows := []string{fmt.Sprintf("📦 已安装插件（%d）", len(items))}
 		for _, item := range items {
 			source := "手动"
-			if item.Source == plugin.CatalogURL {
+			if item.Source == bundledSource {
+				source = "内置（随主程序更新）"
+			} else if item.Source == plugin.CatalogURL {
 				source = "远程"
 			}
 			changed := ""
@@ -194,9 +197,18 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 				return tpmResult{}, e
 			}
 			for _, v := range items {
+				if action == "remove" && v.Source == bundledSource {
+					skipped++
+					rows = append(rows, "⏭ "+v.Manifest.Name+"：内置插件，无需卸载源码")
+					continue
+				}
 				if action == "update" && v.Source != plugin.CatalogURL {
 					skipped++
-					rows = append(rows, "⏭ "+v.Manifest.Name+"：手动插件")
+					label := "手动插件"
+					if v.Source == bundledSource {
+						label = "内置插件，随主程序更新"
+					}
+					rows = append(rows, "⏭ "+v.Manifest.Name+"："+label)
 					continue
 				}
 				names = append(names, v.Manifest.Name)

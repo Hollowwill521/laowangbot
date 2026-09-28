@@ -49,7 +49,19 @@ func (m *sourceManager) Installed() ([]plugin.InstalledInfo, error) {
 			items[i].Error = "旧独立进程插件已停用；请用 Go 源码包 replace 迁移，或 rm 卸载"
 		}
 	}
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	present := map[string]bool{}
+	for _, item := range items {
+		present[item.Manifest.Name] = true
+	}
+	for _, entry := range bundledEntries(nil) {
+		if !present[entry.Manifest.Name] {
+			items = append(items, plugin.InstalledInfo{Manifest: entry.Manifest, Source: bundledSource})
+		}
+	}
+	return items, nil
 }
 
 // Batch mutates one private deployment, then asks the builder to compile once.
