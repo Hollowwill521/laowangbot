@@ -37,7 +37,7 @@ func main(){
   if ((Get-FileHash (Join-Path $root 'laowangbot.exe')).Hash -ne $before) { throw 'Failed check changed binary' }
   # Feed the wizard choices without changing the user's real scheduled tasks.
   $global:MigrationAnswers = [Collections.Generic.Queue[string]]::new()
-  foreach ($answer in @('3', $source, 'y')) { $global:MigrationAnswers.Enqueue($answer) }
+  foreach ($answer in @('3', $source, '1')) { $global:MigrationAnswers.Enqueue($answer) }
   function global:Read-Host { param([string]$Prompt) if ($global:MigrationAnswers.Count -eq 0) { throw 'unexpected prompt' }; $global:MigrationAnswers.Dequeue() }
   try {
     $wizardRoot = Join-Path $work 'wizard-root'

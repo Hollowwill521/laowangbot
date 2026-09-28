@@ -20,14 +20,17 @@ esac
 BOT
 chmod +x "$WORK/fixture"
 for choice in 1 2 3; do
- printf '%s\n%s\n%s\n%s\n' "$choice" "$WORK/old bot" manual y | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/new-$choice"
+ printf '%s\n%s\n%s\n%s\n' "$choice" "$WORK/old bot" 2 1 | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/new-$choice"
  cmp "$WORK/old bot/config.json" "$WORK/new-$choice/config.json"
  test -x "$WORK/new-$choice/laowangbot"
 done
 printf 'mibot-lite\nmibox\ntelebox\n' > "$WORK/expected"
 cmp "$WORK/log" "$WORK/expected"
+# Unsupported choices do not migrate.
+if printf '1\n%s\n9\n' "$WORK/old bot" | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/invalid-choice"; then exit 1; fi
+test ! -e "$WORK/invalid-choice"
 # Declining the stop confirmation and EOF must never start migration.
-if printf '3\n%s\nmanual\nn\n' "$WORK/old bot" | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/declined"; then exit 1; fi
+if printf '3\n%s\n2\n0\n' "$WORK/old bot" | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/declined"; then exit 1; fi
 test ! -e "$WORK/declined"
 if WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/eof" < /dev/null; then exit 1; fi
 test ! -e "$WORK/eof"
@@ -51,17 +54,22 @@ case "$1" in
 esac
 MOCK
 chmod +x "$WORK/mock/"*
-if printf '1\n%s\nsystemd\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/failed"; then exit 1; fi
+if printf '1\n%s\n1\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/failed"; then exit 1; fi
 # Migration fails after stop: restore only the service stopped by the installer.
 grep -q '^stop oldbot.service$' "$WORK/service.log"
 grep -q '^start oldbot.service$' "$WORK/service.log"
 test ! -e "$WORK/stopped"
 test ! -e "$WORK/failed/laowangbot"
+# Enter defaults to systemd and must follow the same checked stop/recovery path.
+: > "$WORK/service.log"
+if printf '1\n%s\n\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/default"; then exit 1; fi
+grep -q '^stop oldbot.service$' "$WORK/service.log"
+grep -q '^start oldbot.service$' "$WORK/service.log"
 echo 'Migration wizard tests passed'
 
 # A mismatched service must never be stopped.
 : > "$WORK/service.log"
-if printf '1\n%s\nsystemd\nother.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/new-1" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/mismatch"; then exit 1; fi
+if printf '1\n%s\n1\nother.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/new-1" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/mismatch"; then exit 1; fi
 if grep -q '^stop ' "$WORK/service.log"; then echo 'Stopped mismatched service' >&2; exit 1; fi
 if printf '1\n%s\n' "$WORK/old bot" | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/old bot/nested"; then exit 1; fi
 test ! -e "$WORK/old bot/nested"
@@ -69,7 +77,7 @@ echo 'Source-service matching and source containment tests passed'
 
 # Transitional services may still have live processes even if is-active is nonzero.
 : > "$WORK/service.log"
-if printf '1\n%s\nsystemd\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_STATE=activating SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/transitional"; then exit 1; fi
+if printf '1\n%s\n1\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_STATE=activating SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/transitional"; then exit 1; fi
 grep -q '^stop oldbot.service$' "$WORK/service.log"
 grep -q '^start oldbot.service$' "$WORK/service.log"
 echo 'Transitional source stop test passed'
@@ -97,7 +105,7 @@ chmod +x "$WORK/mock/"*
 : > "$WORK/service.log"
 # Existing real units are outside this test's scope.
 if [ ! -f /etc/systemd/system/laowangbot.service ]; then
- if printf '1\n%s\nsystemd\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --binary "$WORK/fixture" --root "$WORK/before-start"; then exit 1; fi
+ if printf '1\n%s\n1\noldbot.service\n' "$WORK/old bot" | PATH="$WORK/mock:$PATH" SOURCE_ROOT="$WORK/old bot" STOP_FILE="$WORK/stopped" SERVICE_LOG="$WORK/service.log" WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --binary "$WORK/fixture" --root "$WORK/before-start"; then exit 1; fi
  grep -q '^start oldbot.service$' "$WORK/service.log"
  if grep -q '^stop laowangbot$' "$WORK/service.log"; then echo 'Stopped target that never started';exit 1;fi
  test ! -e "$WORK/stopped"

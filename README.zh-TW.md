@@ -12,7 +12,7 @@ laowangbot 保留既有內建指令；核心不需要 Node.js。外掛以 Go 原
 
 ## 快速開始
 
-### 一鍵部署
+### 全新安裝（需要登入）
 
 首次安裝及執行官方二進位檔不需 Go 或 Node.js；管理原始碼外掛及原始碼升級需要 Go 和 Git。安裝器下載最新官方 Release、校驗 SHA-256，互動登入後啟動背景工作。Release 必須包含對應平台執行檔與 `checksums.txt`；尚未發布時請使用下方原始碼方式。
 
@@ -30,6 +30,25 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 ```
 
 Linux 使用 systemd，macOS 使用目前使用者的 launchd 工作，Windows 使用使用者登入排程工作。安裝後在「已儲存訊息」傳送 `.ping`、`.help` 驗證連線；登入需要 Telegram API ID、API hash、手機號碼與驗證碼。完整參數請參閱 [安裝指南](INSTALL.md)。
+
+### 從舊人形一鍵遷移（不需複製設定）
+
+已有 mibot-lite、MiBox 或 TeleBox？請使用以下遷移命令，不要使用上方全新安裝命令。選擇舊人形與目錄後，自動搬移設定、會話及支援的資料；舊會話有效時不需重新輸入 API ID 或登入。
+
+```sh
+# Linux
+sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root /opt/laowangbot'
+
+# macOS
+bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root "$HOME/laowangbot-data"
+```
+
+```powershell
+# Windows PowerShell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
+```
+
+目標目錄必須為空；依精靈停止舊實例，原目錄保留。若停在 `API ID:`，按 Ctrl+C 後改用以上命令。目標非空時先檢查內容，不要直接刪除。未知外掛只封存，程式碼仍需適配。詳見[遷移指南](docs/migration.md)。
 
 ### 原始碼安裝與遷移
 
@@ -104,5 +123,3 @@ go vet ./...
 外掛安裝、更新及移除會重新編譯主程式，需要 Go 和 Git。Windows 尚不支援自動建置替換，需外部建置後停止服務，手動替換二進位檔及相符的原始碼快照。
 
 `.tpm s 關鍵詞` 搜尋，`.tpm ls -v` 查看詳情，`.tpm i 名稱1 名稱2` 或 `.tpm i all` 安裝，`.tpm update` 批次更新，`.tpm rm 名稱` 解除安裝，`.tpm ul 名稱` 匯出 ZIP。回覆已適配的 ZIP 檔案並傳送 `.tpm i` 可手動安裝。遠端來源固定為本專案；手動外掛不自動更新，本機修改預設受保護，變更於重新啟動後生效。詳見[完整用法](docs/plugins.md#tpm-命令)。
-
-同機遷移不需複製設定：Linux 執行 `sudo bash scripts/install.sh --wizard --root /opt/laowangbot`，依選單選擇舊人形和部署目錄。macOS 移除 sudo 並使用使用者目錄；Windows 使用 `-Wizard`。詳見[遷移精靈](docs/migration.md#同机一键迁移向导)。

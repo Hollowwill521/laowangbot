@@ -21,7 +21,7 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 .\scripts\install.ps1 -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-向导依次询问：①旧人形 `mibot-lite` / `MiBox` / `TeleBox`；②包含 `config.json` 的旧部署目录；③旧实例停止方式。Linux 选择 `systemd` 后输入服务名，脚本验证该服务的工作目录与旧目录一致，再停止服务。其他方式选择 `manual`，停止旧 Docker/PM2/后台实例后输入 `y`。脚本不会搜索、终止无关进程。
+向导依次询问：①旧人形 `mibot-lite` / `MiBox` / `TeleBox`；②包含 `config.json` 的旧部署目录；③旧实例停止方式。Linux 选择 `1`（回车默认）后输入 systemd 服务名，脚本验证该服务的工作目录与旧目录一致，再停止服务。已自行停止或其他平台选择 `2`，停止旧 Docker/PM2/后台实例后选择 `1` 确认继续（回车默认取消）。脚本不会搜索、终止无关进程。
 
 脚本自动下载并校验 laowangbot，迁移配置、会话、已支持数据和插件清单，检查新部署并安装后台任务。旧目录保留；无法直接运行的旧插件归档在 `legacy/`，需自行适配代码。失败时尝试恢复由脚本停止的旧 systemd 服务；无法确认新服务已经停止时，不启动旧服务，避免双实例运行。成功后旧 systemd 服务保持停止，其开机自启动配置不会被修改，请避免重启服务器后自动启动旧实例。
 
@@ -77,3 +77,5 @@ Telegram 对应 `.tpm local 路径`、`.tpm replace 路径`、`.tpm list`。安�
 上游起点：MiCat-S/mibot-lite `dbc404a2323061c4abd7f13088622e1d045153fa`。TeleBox 数据结构核对基线：`cf53d468b5bd4c47254dc98e2cc55418e2cb84f8`。这些是结构核对依据，不代表所有版本、全部插件或真实账号联调通过。
 
 回退时停止新实例，再启动保留的旧部署。新实例运行后产生的数据不会自动反向同步；必要时先备份。不要让旧、新实例同时使用同一 Telegram 会话。
+
+向导固定选项统一输入数字；systemd 停止方式回车默认选 1。标题/输入提示为青色，选项/成功为绿色，注意事项为黄色，错误为红色。非终端或设置 `NO_COLOR` 时不输出颜色。目录和服务名仍需输入文本。

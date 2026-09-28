@@ -24,6 +24,7 @@ jobs:
         run: |
           bash tests/deployment/install_test.sh
           bash tests/deployment/migrate_wizard_test.sh
+          python3 tests/deployment/install_colors_test.py
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |

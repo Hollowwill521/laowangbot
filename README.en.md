@@ -12,7 +12,7 @@ The project is published at `github.com/OrionG-hub/laowangbot`. Official Release
 
 ## Quick start
 
-### One-command installation
+### Fresh installation (login required)
 
 Installing and running the official binary requires neither Go nor Node.js. Source plugin management and source upgrades require Go and Git. The installer downloads the latest official Release, verifies SHA-256, prompts for login and starts a background task. The Release must contain the platform binary and `checksums.txt`; use the source workflow below until these assets are published.
 
@@ -30,6 +30,25 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 ```
 
 Linux uses systemd, macOS a per-user launchd job, and Windows a user logon scheduled task. Send `.ping` and `.help` in Saved Messages after installation to verify connectivity. Login requires your Telegram API ID, API hash, phone number and verification code. See [INSTALL.md](INSTALL.md) for all options.
+
+### One-command migration from an existing bot
+
+Already running mibot-lite, MiBox or TeleBox? Use this migration command instead of the fresh installer above. Select the old bot and directory; configuration, session and supported data are transferred automatically. A valid existing session requires no new API ID entry or login.
+
+```sh
+# Linux
+sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root /opt/laowangbot'
+
+# macOS
+bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root "$HOME/laowangbot-data"
+```
+
+```powershell
+# Windows PowerShell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
+```
+
+Use an empty destination and stop the old instance as prompted. The source directory is preserved. If you are at `API ID:`, press Ctrl+C and use the commands above. Inspect a nonempty destination instead of deleting it. Unknown plugins are archived and still require code adaptation. See the [migration guide](docs/migration.md).
 
 ### Source installation and migration
 
@@ -104,5 +123,3 @@ Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit
 Installing, updating or removing plugins rebuilds the host and requires Go and Git. Windows does not support automatic source rebuilding and replacement; build externally, stop the service, then manually replace the binary and its matching source snapshot.
 
 Use `.tpm s keyword` to search, `.tpm ls -v` for details, `.tpm i name1 name2` or `.tpm i all` to install, `.tpm update` to update remote plugins, `.tpm rm name` to uninstall, and `.tpm ul name` to export ZIP. Reply to an adapted ZIP package with `.tpm i` to install manually. The source stays fixed to this project. Manual plugins are never remotely updated, local changes are protected by default, and changes take effect after restart. See the [TPM guide](docs/plugins.md#tpm-命令).
-
-For same-server migration, run `sudo bash scripts/install.sh --wizard --root /opt/laowangbot` on Linux and select your old bot and deployment directory. No manual configuration copying is required. On macOS omit sudo and use a user directory; Windows uses `-Wizard`. See the [migration wizard](docs/migration.md#同机一键迁移向导).

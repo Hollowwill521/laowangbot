@@ -2,28 +2,42 @@
 # Downloaded installations require a published GitHub release. --binary is an explicit trusted local override.
 set -euo pipefail
 umask 077
+# Color only interactive terminals; NO_COLOR disables styling for accessible output.
+C_RESET=; C_TITLE=; C_OK=; C_WARN=; C_ERROR=
+if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR+x}" ]; then
+  C_RESET=$'\033[0m'; C_TITLE=$'\033[1;36m'; C_OK=$'\033[1;32m'; C_WARN=$'\033[1;33m'; C_ERROR=$'\033[1;31m'
+fi
+ui() { local color=$1; shift; printf '%s%s%s\n' "$color" "$*" "$C_RESET" >&2; }
+info() { ui "$C_TITLE" "$*"; }
+success() { ui "$C_OK" "$*"; }
+warn() { ui "$C_WARN" "$*"; }
+error() { ui "$C_ERROR" "$*"; }
+die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
 BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --root|--repo|--version|--binary|--migrate|--from|--restore)
-      [ $# -ge 2 ] || { echo "Missing value for $1" >&2; exit 2; }
+      [ $# -ge 2 ] || { error "Missing value for $1"; exit 2; }
       case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; esac; shift 2;;
     --wizard) WIZARD=1; shift;;
     --no-service) SERVICE=0; shift;;
-    --help|-h) echo 'Usage: install.sh [--wizard] [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
-    *) echo "Unknown argument: $1" >&2; exit 2;;
+    --help|-h) info 'Usage: install.sh [--wizard] [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
+    *) error "Unknown argument: $1"; exit 2;;
   esac
 done
-die() { echo "$*" >&2; exit 1; }
 [ -z "$MIGRATE" ] || [ -z "$RESTORE" ] || die 'Choose migration or restore'
 case "$FROM" in auto|mibot-lite|mibox|telebox) ;; *) die 'Unsupported migration source';; esac
 case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) die 'Use install.ps1 on Windows';; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; arm64|aarch64) ARCH=arm64;; *) die 'Unsupported architecture';; esac
-ask() { printf '%s' "$1" >&2; IFS= read -r ANSWER || die '输入结束，迁移已取消'; }
+ask() { printf '%s%s%s' "$C_TITLE" "$1" "$C_RESET" >&2; IFS= read -r ANSWER || die '输入结束，迁移已取消'; }
 if [ "$WIZARD" = 1 ]; then
   [ -z "$MIGRATE$RESTORE" ] || die '--wizard 不能和 --migrate / --restore 同时使用'
-  printf '%s\n' '迁移到 laowangbot：无需手动复制配置、会话和数据。' '1) mibot-lite' '2) MiBox' '3) TeleBox' '0) 取消' >&2
+  info '迁移到 laowangbot：无需手动复制配置、会话和数据。'
+  ui "$C_OK" '1) mibot-lite'
+  ui "$C_OK" '2) MiBox'
+  ui "$C_OK" '3) TeleBox'
+  warn '0) 取消'
   ask '请选择旧人形 [1-3]：'
   case "$ANSWER" in 1) FROM=mibot-lite;; 2) FROM=mibox;; 3) FROM=telebox;; *) die '已取消，未更改旧部署';; esac
   case "$FROM" in mibot-lite) SUGGESTED="$HOME/mibot-lite";; mibox) SUGGESTED="$HOME/mibot";; telebox) SUGGESTED="$HOME/TeleBox";; esac
@@ -59,11 +73,16 @@ if [ -n "$MIGRATE" ]; then
   if [ -d "$ROOT" ] && [ -n "$(ls -A "$ROOT")" ]; then die 'Migration destination must be empty'; fi
 fi
 if [ "$WIZARD" = 1 ]; then
-  printf '旧目录：%s\n新目录：%s\n旧目录将保留；不支持的插件会归档并列入报告。\n' "$MIGRATE" "$ROOT" >&2
-  ask '旧实例停止方式：systemd（脚本停止）或 manual（已自行停止）[manual]：'
-  case "${ANSWER:-manual}" in
-    systemd)
-      [ "$OS" = linux ] || die '此平台请使用 manual 并先停止旧实例'
+  info "旧目录：$MIGRATE"
+  info "新目录：$ROOT"
+  warn '旧目录将保留；不支持的插件会归档并列入报告。'
+  info '旧实例停止方式：'
+  ui "$C_OK" '1) 由脚本停止 systemd 服务（默认）'
+  ui "$C_OK" '2) 已自行停止'
+  ask '请选择 [1-2，回车默认 1]：'
+  case "${ANSWER:-1}" in
+    1|systemd)
+      [ "$OS" = linux ] || die '此平台请选 2 并先停止旧实例'
       command -v systemctl >/dev/null || die '找不到 systemctl'
       ask '旧 systemd 服务名称（例如 mibot-lite.service）：'
       SOURCE_SERVICE=$ANSWER
@@ -72,9 +91,12 @@ if [ "$WIZARD" = 1 ]; then
       OLD_ROOT=$(systemctl show "$SOURCE_SERVICE" -p WorkingDirectory --value)
       [ -d "$OLD_ROOT" ] && [ "$(cd -- "$OLD_ROOT" && pwd -P)" = "$MIGRATE" ] || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
       ;;
-    manual)
-      ask '请确认旧人形已停止（包括 Docker/PM2/后台进程），输入 y 继续：'
-      case "$ANSWER" in y|Y) ;; *) die '已取消，请先停止旧实例';; esac
+    2|manual)
+      warn '请确认旧人形已停止（包括 Docker/PM2/后台进程）。'
+      ui "$C_OK" '1) 已停止，继续迁移'
+      warn '0) 取消'
+      ask '请选择 [0-1，回车默认 0]：'
+      case "${ANSWER:-0}" in 1|y|Y) ;; *) die '已取消，请先停止旧实例';; esac
       ;;
     *) die '停止方式无效，已取消';;
   esac
@@ -95,15 +117,16 @@ cleanup() {
       if [ "$HAD_UNIT" = 1 ]; then cp "$WORK/unit" "$UNIT"; else rm -f "$UNIT"; fi
     fi
     if [ "$SOURCE_STOPPED" = 1 ]; then
-      if [ "$SAFE_TO_RESUME" = 1 ]; then systemctl start "$SOURCE_SERVICE" || echo "旧服务恢复失败：$SOURCE_SERVICE" >&2
-      else echo "无法确认新服务已停止，未恢复旧服务，避免双实例运行。" >&2; fi
+      if [ "$SAFE_TO_RESUME" = 1 ]; then systemctl start "$SOURCE_SERVICE" || error "旧服务恢复失败：$SOURCE_SERVICE"
+      else error "无法确认新服务已停止，未恢复旧服务，避免双实例运行。"; fi
     fi
-    [ "$STOPPED" = 0 ] || service_start || echo 'Previous service could not restart; inspect service logs' >&2
+    [ "$STOPPED" = 0 ] || service_start || error '旧服务恢复失败，请检查服务日志'
   fi
   rm -rf "$WORK"
   exit "$rc"
 }
 trap cleanup EXIT
+info "准备 laowangbot 安装文件…"
 if [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
   ASSET=laowangbot-$OS-$ARCH
   if [ "$VERSION" = latest ]; then BASE="https://github.com/$REPO/releases/latest/download"; else BASE="https://github.com/$REPO/releases/download/$VERSION"; fi
@@ -131,6 +154,7 @@ if [ -n "$SOURCE_SERVICE" ]; then
   [ "$OLD_STATE" = inactive ] || die '旧服务未完全停止，拒绝迁移'
 fi
 mkdir -p "$ROOT"
+[ -z "$MIGRATE" ] || info "正在迁移 $FROM 配置、会话和数据…"
 [ -z "$MIGRATE" ] || "$WORK/new" --migrate "$MIGRATE" --from "$FROM" --root "$ROOT"
 [ -z "$RESTORE" ] || "$WORK/new" --restore "$RESTORE" --root "$ROOT"
 if [ ! -f "$ROOT/config.json" ]; then
@@ -181,9 +205,11 @@ PLIST
 fi
 [ "$HAD_BINARY" = 0 ] || cp "$WORK/previous" "$ROOT/laowangbot.previous"
 SUCCESS=1
-printf 'Installed %s (local configuration checked; Telegram connectivity not verified)\n' "$ROOT/laowangbot"
+success "安装完成：$ROOT/laowangbot"
+warn "本地配置检查通过；请在 Telegram 执行 .ping 确认连接。"
 
 if [ -n "$MIGRATE" ]; then
-  printf '迁移完成。旧部署保留在：%s\n迁移报告：%s/migration-report.json\n' "$MIGRATE" "$ROOT"
-  if [ -n "$SOURCE_SERVICE" ]; then printf '旧服务保持停止：%s；旧服务自启动设置未更改，请避免重启服务器后双实例运行。\n' "$SOURCE_SERVICE"; fi
+  success "迁移完成。旧部署保留在：$MIGRATE"
+  info "迁移报告：$ROOT/migration-report.json"
+  if [ -n "$SOURCE_SERVICE" ]; then warn "旧服务保持停止：$SOURCE_SERVICE；旧服务自启动设置未更改，请避免重启服务器后双实例运行。"; fi
 fi
