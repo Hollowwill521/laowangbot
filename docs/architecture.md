@@ -31,15 +31,12 @@ Go 核心保留上游内建功能；没有必需的 JavaScript 引擎或 Node.js
 需要 Go 1.26。新增内建命令时实现 `Register(a *app.App)`，调用 `a.Registry.Register`，并在 `internal/commands/register.go` 注册。授权借用需要单独审视 `internal/commands/sudo` 白名单，不能默认授权新命令。独立扩展优先参考[插件协议与示例](plugins.md)。
 
 ```sh
-go test ./... -coverprofile=coverage.out
-go test -tags=integration ./...
-go tool cover -func=coverage.out
+go build ./...
 go vet ./...
-bash tests/deployment/install_test.sh
 bash scripts/build.sh
 ```
 
-集成测试使用仓库的 `integration` 构建标签。覆盖率输出以本次命令结果为准；不要将历史上游结果或 CI 配置视作当前通过证据。Windows 部署脚本测试位于 `tests/deployment/windows_test.ps1`，须在 Windows 执行。
+测试文件和测试数据仅保留于本地，不随仓库发布。单元测试、集成测试与覆盖率检查需要本地测试副本；仓库 CI 仅执行构建、静态检查和安装脚本语法检查。历史覆盖率不能作为当前代码的验证结果。
 
 `bash scripts/release.sh vX.Y.Z` 生成六个平台/架构构件和校验清单；Go 交叉编译不能证明目标平台运行正确。真实 Linux systemd、Windows 计划任务、Docker 及 Telegram 登录验收仍需相应环境。`--verify` 使用真实账号与外部服务，先停用同会话的其他实例。
 

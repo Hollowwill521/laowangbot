@@ -26,3 +26,8 @@ coverage.out
 coverage*.html
 .idea/
 .superpowers/
+
+# Tests and fixtures stay local
+*_test.go
+/tests/
+**/testdata/

@@ -108,13 +108,11 @@ Migration imports known configuration and archives old assets/plugins. Unknown T
 ## Validation and provenance
 
 ```sh
-go test ./... -coverprofile=coverage.out
-go test -tags=integration ./...
-go tool cover -func=coverage.out
+go build ./...
 go vet ./...
 ```
 
-Run unit tests, integration tests and coverage checks as shown below. CI definitions and cross-compilation do not prove target-platform runtime success. Live Linux/Windows/Docker deployment and real Telegram account checks still need validation; no upstream memory figures are claimed as current measurements.
+Tests and fixtures are kept locally and are not distributed in this repository. Unit tests, integration tests and coverage checks require a local test copy; CI runs builds and static checks. CI definitions and cross-compilation do not prove target-platform runtime success. Live Linux/Windows/Docker deployment and real Telegram account checks still need validation; no upstream memory figures are claimed as current measurements.
 
 Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit `dbc404a2323061c4abd7f13088622e1d045153fa`, on local branch `refactor/laowangbot`. Original attribution and [LGPL-2.1](LICENSE) are retained. The Noto Sans SC subset uses [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt).
 

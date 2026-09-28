@@ -108,13 +108,11 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 ## 驗證與來源
 
 ```sh
-go test ./... -coverprofile=coverage.out
-go test -tags=integration ./...
-go tool cover -func=coverage.out
+go build ./...
 go vet ./...
 ```
 
-執行以下單元測試、整合測試及覆蓋率檢查。CI 設定與交叉編譯不代表目標平台已成功執行；Linux、Windows、Docker 真實部署與 Telegram 真實帳號仍待驗收，不將上游記憶體數字當成本專案實測。
+測試與測試資料僅保留於本機，不隨儲存庫發布；單元測試、整合測試及覆蓋率檢查須使用本機測試副本。CI 執行建置與靜態檢查。CI 設定與交叉編譯不代表目標平台已成功執行；Linux、Windows、Docker 真實部署與 Telegram 真實帳號仍待驗收，不將上游記憶體數字當成本專案實測。
 
 源自 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) 的 `dbc404a2323061c4abd7f13088622e1d045153fa`，本機分支為 `refactor/laowangbot`。保留原作者歸屬與 [LGPL-2.1](LICENSE)。Noto Sans SC 字型子集依 [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) 發布。
 

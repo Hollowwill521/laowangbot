@@ -106,14 +106,12 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 ## 开发与验证
 
 ```sh
-go test ./... -coverprofile=coverage.out
-go test -tags=integration ./...
-go tool cover -func=coverage.out
+go build ./...
 go vet ./...
 bash scripts/build.sh
 ```
 
-仓库提供多平台 CI 配置；配置存在不等于已经在远程运行。Windows、Linux 服务及 Docker 的真实部署、Telegram 真账号联调仍需相应环境验收；交叉编译或离线检查不证明运行时成功。不沿用上游内存数字作为本项目实测结果。
+测试与测试数据仅在本地保留，不随仓库发布；单元测试、集成测试及覆盖率检查须使用本地测试副本。仓库 CI 执行多平台构建和静态检查；配置存在不等于已经在远程运行。Windows、Linux 服务及 Docker 的真实部署、Telegram 真账号联调仍需相应环境验收；交叉编译或离线检查不证明运行时成功。不沿用上游内存数字作为本项目实测结果。
 
 ## 来源与许可
 

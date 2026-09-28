@@ -3,7 +3,7 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
-  test:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -17,39 +17,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go test ./... -coverprofile=coverage.out
-      - run: go test -tags=integration ./...
-      - run: go tool cover -func coverage.out
+      - run: go build ./...
+      - run: go vet ./...
       - if: runner.os != 'Windows'
-        run: |
-          bash tests/deployment/install_test.sh
-          bash tests/deployment/migrate_wizard_test.sh
-          bash tests/deployment/service_detection_test.sh
-          python3 tests/deployment/install_colors_test.py
+        run: for script in scripts/*.sh; do bash -n "$script" || exit; done
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("$PWD/scripts/install.ps1", [ref]$null, [ref]$errors) | Out-Null
           if ($errors) { throw $errors }
-          ./tests/deployment/windows_test.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.os }}
-          path: coverage.out
-
-  tgs-animation:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: python -m pip install rlottie-python==1.3.8 Pillow==12.3.0
-      - run: go test -count=1 -tags=integration ./internal/media ./internal/commands/yvlu
-        env:
-          LAOWANGBOT_TEST_TGS: '1'

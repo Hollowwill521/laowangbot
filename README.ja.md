@@ -108,13 +108,11 @@ bash scripts/install.sh --binary "$PWD/laowangbot" \
 ## 検証と由来
 
 ```sh
-go test ./... -coverprofile=coverage.out
-go test -tags=integration ./...
-go tool cover -func=coverage.out
+go build ./...
 go vet ./...
 ```
 
-以下の単体・統合テストとカバレッジ確認を実行します。CI 定義やクロスコンパイルだけでは対象環境の動作を保証できません。Linux、Windows、Docker の実配備と Telegram 実アカウントの検証は未完了です。上流のメモリ使用量を本プロジェクトの測定値として扱いません。
+テストとテストデータはローカルで保管し、リポジトリには含めません。単体・統合テストとカバレッジ確認にはローカルのテスト一式が必要です。CI はビルドと静的検査を実行します。CI 定義やクロスコンパイルだけでは対象環境の動作を保証できません。Linux、Windows、Docker の実配備と Telegram 実アカウントの検証は未完了です。上流のメモリ使用量を本プロジェクトの測定値として扱いません。
 
 [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite) の `dbc404a2323061c4abd7f13088622e1d045153fa` を起点とし、ローカルブランチは `refactor/laowangbot` です。元の著作者表示と [LGPL-2.1](LICENSE) を維持します。Noto Sans SC のサブセットは [SIL OFL 1.1](internal/statuscard/NotoSansSC-OFL.txt) で配布されます。
 
