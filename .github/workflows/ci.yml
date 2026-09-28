@@ -5,9 +5,13 @@ permissions:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -15,7 +19,7 @@ jobs:
           go-version-file: go.mod
       - run: go test ./... -coverprofile=coverage.out
       - run: go test -tags=integration ./...
-      - run: go tool cover -func=coverage.out
+      - run: go tool cover -func coverage.out
       - if: runner.os != 'Windows'
         run: bash tests/deployment/install_test.sh
       - if: runner.os == 'Windows'
