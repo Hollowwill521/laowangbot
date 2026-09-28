@@ -48,7 +48,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-目標目錄必須為空；依精靈停止舊實例，原目錄保留。若停在 `API ID:`，按 Ctrl+C 後改用以上命令。目標非空時先檢查內容，不要直接刪除。未知外掛只封存，程式碼仍需適配。詳見[遷移指南](docs/migration.md)。
+目標目錄必須為空，原目錄保留。Linux 遷移會停止並停用舊 systemd 服務的自動啟動，失敗恢復原狀；其他啟動器須先自行停止並停用自動啟動。若停在 `API ID:`，按 Ctrl+C 後改用以上命令。目標非空時先檢查內容，不要直接刪除。未知外掛只封存，程式碼仍需適配。詳見[遷移指南](docs/migration.md)。
 
 ### 原始碼安裝與遷移
 

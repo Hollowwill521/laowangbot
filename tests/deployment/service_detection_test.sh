@@ -23,11 +23,15 @@ case "$1" in
   printf 'custom-old.service enabled\n'
   [ "${MODE:-one}" != alias ] || printf 'alias-old.service enabled\n';;
  show)
-  if [ "$4" = WorkingDirectory ]; then
+  if [ "$4" = TriggeredBy ]; then echo "${SOURCE_TRIGGERS:-}"
+   elif [ "$4" = UnitFileState ]; then if [ -f "$STOP_FILE.disabled" ]; then echo disabled; else echo "${SOURCE_ENABLED:-enabled}"; fi
+   elif [ "$4" = WorkingDirectory ]; then
    case "$2" in custom-old.service|other-old.service|mibot-lite.service|alias-old.service) printf '%s\n' "$SOURCE_ROOT";; *) printf '%s\n' "$OTHER_ROOT";; esac
   elif [ "$4" = Id ]; then if [ "$2" = alias-old.service ];then echo custom-old.service;else echo "$2";fi
   elif [ -f "$STOP_FILE" ]; then echo inactive
-  else echo activating; fi;;
+  else echo "${SOURCE_STATE:-activating}"; fi;;
+ disable) touch "$STOP_FILE.disabled"; [ "${DISABLE_FAIL:-0}" = 0 ];;
+ enable) rm -f "$STOP_FILE.disabled";;
  stop) case "$2" in custom-old.service|other-old.service|mibot-lite.service) ;; *) exit 9;; esac; touch "$STOP_FILE";;
  start) case "$2" in custom-old.service|other-old.service|mibot-lite.service) ;; *) exit 9;; esac; rm -f "$STOP_FILE";;
 esac
@@ -50,19 +54,19 @@ for mode in none many failed;do
  if printf '1\n%s\n' "$WORK/old" | MODE=$mode bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/binary" --root "$WORK/$mode";then echo "Accepted $mode";exit 1;fi
  if grep -q '^stop ' "$WORK/log";then echo 'Stopped ambiguous/unmatched service';exit 1;fi
 done
-# Explicit manual-stop flag skips discovery without another prompt.
+# Manual-stop still discovers and disables the matching boot service.
 : > "$WORK/log"
-printf '1\n%s\n' "$WORK/old" | MODE=failed bash "$REPO/scripts/install.sh" --wizard --source-stopped --no-service --binary "$WORK/binary" --root "$WORK/manual"
-test ! -s "$WORK/log"
+printf '1\n%s\n' "$WORK/old" | MODE=one bash "$REPO/scripts/install.sh" --wizard --source-stopped --no-service --binary "$WORK/binary" --root "$WORK/manual"
+grep -q '^disable custom-old.service$' "$WORK/log"
 # Failed migration resumes precisely the automatically stopped source.
-rm -f "$STOP_FILE"
+rm -f "$STOP_FILE" "$STOP_FILE.disabled"
 : > "$WORK/log"
 if printf '1\n%s\n' "$WORK/old" | MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/binary" --root "$WORK/failure";then exit 1;fi
 grep -q '^start custom-old.service$' "$WORK/log"
 echo 'Automatic source service detection tests passed'
 
 : > "$WORK/log"
-printf '1\n%s\n2\n' "$WORK/old" | MODE=many bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/binary" --root "$WORK/multiple-picked"
+printf '1\n%s\n2\n' "$WORK/old" | MODE=many SOURCE_STATE=inactive SOURCE_ENABLED=disabled bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/binary" --root "$WORK/multiple-picked"
 grep -q '^stop other-old.service$' "$WORK/log"
 : > "$WORK/log"
 printf '1\n%s\n\n' "$WORK/old" | MODE=none bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/binary" --root "$WORK/fallback-default"
@@ -74,3 +78,48 @@ printf '1\n%s\n' "$WORK/old" | MODE=alias bash "$REPO/scripts/install.sh" --wiza
 grep -q '^stop custom-old.service$' "$WORK/log"
 if grep -q '^stop alias-old.service$' "$WORK/log";then exit 1;fi
 echo 'Canonical service alias deduplication passed'
+
+# Boot simulation: only enabled units start again; migrated sources stay inactive.
+rm -f "$STOP_FILE" "$STOP_FILE.disabled"
+: > "$WORK/log"
+bash "$REPO/scripts/install.sh" --migrate "$WORK/old" --no-service --binary "$WORK/binary" --root "$WORK/noninteractive"
+test -f "$STOP_FILE.disabled"
+if [ "$(systemctl show custom-old.service -p UnitFileState --value)" = enabled ]; then systemctl start custom-old.service; fi
+test -f "$STOP_FILE"
+
+# Preserve original persistent/runtime enablement and original activity on failure.
+for enabled in enabled enabled-runtime disabled; do
+ for active in active inactive; do
+  rm -f "$STOP_FILE" "$STOP_FILE.disabled"
+  : > "$WORK/log"
+  if SOURCE_ENABLED=$enabled SOURCE_STATE=$active MIGRATE_FAIL=1 bash "$REPO/scripts/install.sh" --migrate "$WORK/old" --no-service --binary "$WORK/binary" --root "$WORK/restore-$enabled-$active"; then exit 1; fi
+  case "$enabled" in
+   enabled) grep -q '^enable custom-old.service$' "$WORK/log"; test ! -e "$STOP_FILE.disabled";;
+   enabled-runtime) grep -q '^enable --runtime custom-old.service$' "$WORK/log"; test ! -e "$STOP_FILE.disabled";;
+   disabled) if grep -q '^enable ' "$WORK/log"; then exit 1; fi;;
+  esac
+  if [ "$active" = active ]; then grep -q '^start custom-old.service$' "$WORK/log"
+  elif grep -q '^start ' "$WORK/log"; then echo 'Started originally inactive source'; exit 1; fi
+ done
+done
+
+# Partially failed disable must restore enablement and running source before exit.
+rm -f "$STOP_FILE" "$STOP_FILE.disabled"
+: > "$WORK/log"
+if DISABLE_FAIL=1 bash "$REPO/scripts/install.sh" --migrate "$WORK/old" --no-service --binary "$WORK/binary" --root "$WORK/disable-failed"; then exit 1; fi
+grep -q '^enable custom-old.service$' "$WORK/log"
+grep -q '^start custom-old.service$' "$WORK/log"
+test ! -e "$WORK/disable-failed"
+
+# Another enabled/active unit or a timer can restart the old deployment; refuse it.
+for mode in duplicate trigger; do
+ rm -f "$STOP_FILE" "$STOP_FILE.disabled"
+ : > "$WORK/log"
+ if [ "$mode" = duplicate ]; then
+  if printf '1\n' | MODE=many bash "$REPO/scripts/install.sh" --migrate "$WORK/old" --no-service --binary "$WORK/binary" --root "$WORK/reject-$mode"; then exit 1; fi
+ else
+  if SOURCE_TRIGGERS=old.timer bash "$REPO/scripts/install.sh" --migrate "$WORK/old" --no-service --binary "$WORK/binary" --root "$WORK/reject-$mode"; then exit 1; fi
+ fi
+ if grep -Eq '^(stop|disable) ' "$WORK/log"; then echo 'Changed source before rejecting unsafe activation'; exit 1; fi
+done
+echo 'Source boot prevention, original-state rollback, and activation guards passed'

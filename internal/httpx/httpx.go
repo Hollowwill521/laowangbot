@@ -155,3 +155,45 @@ func Reason(err error) string {
 	}
 	return "网络请求失败，请稍后重试"
 }
+
+// Download streams a bounded response to disk without retaining an executable
+// in memory. It shares the standard client's transport and redirect policy.
+func Download(ctx context.Context, request Request, dst io.Writer) (int64, error) {
+	timeout := request.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	limit := request.MaxBytes
+	if limit <= 0 {
+		limit = 2 << 20
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	for key, value := range request.Headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := shared.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, &StatusError{Status: resp.StatusCode}
+	}
+	if resp.ContentLength > limit {
+		return 0, ErrTooLarge
+	}
+	n, err := io.CopyBuffer(dst, io.LimitReader(resp.Body, limit+1), make([]byte, 32<<10))
+	if err != nil {
+		return n, err
+	}
+	if n > limit {
+		return n, ErrTooLarge
+	}
+	return n, nil
+}

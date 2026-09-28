@@ -14,7 +14,7 @@ warn() { ui "$C_WARN" "$*"; }
 error() { ui "$C_ERROR" "$*"; }
 die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
-BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0; SOURCE_ALREADY_STOPPED=0
+BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0; SOURCE_ALREADY_STOPPED=0; SOURCE_ENABLE_STATE=; SOURCE_DISABLED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --root|--repo|--version|--binary|--migrate|--from|--restore)
@@ -102,6 +102,10 @@ select_source_service() {
 $installed"
   case "${#matches[@]}" in
     0)
+      if [ "$SOURCE_ALREADY_STOPPED" = 1 ]; then
+        warn '未找到匹配的 systemd 服务；请确保 Docker/PM2/其他启动器也已禁用旧实例自启动。'
+        return
+      fi
       warn "未找到工作目录为 $MIGRATE 的服务，请输入旧服务名。"
       case "$FROM" in mibot-lite) candidate=mibot-lite.service;; mibox) candidate=mibot.service;; telebox) candidate=telebox.service;; *) candidate=;; esac
       ask "旧 systemd 服务名称${candidate:+ [$candidate]}："
@@ -125,22 +129,32 @@ $installed"
   esac
   valid_source_unit "$SOURCE_SERVICE" || die '服务名称无效，或不能将新服务作为旧服务'
   source_matches "$SOURCE_SERVICE" || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
+  for candidate in "${matches[@]+"${matches[@]}"}"; do
+    [ "$candidate" != "$SOURCE_SERVICE" ] || continue
+    local other_state other_enabled
+    other_state=$(systemctl show "$candidate" -p ActiveState --value) || die '无法核验其他匹配服务'
+    other_enabled=$(systemctl show "$candidate" -p UnitFileState --value) || die '无法核验其他匹配服务自启动'
+    case "$other_state/$other_enabled" in inactive/disabled|inactive/masked|failed/disabled|failed/masked) ;;
+      *) die "同一旧目录还被 $candidate 自动启动或运行，请先停止并禁用该服务";;
+    esac
+  done
 }
-if [ "$WIZARD" = 1 ]; then
+if [ -n "$MIGRATE" ]; then
   info "旧目录：$MIGRATE"
   info "新目录：$ROOT"
-  warn '旧目录将保留；不支持的插件会归档并列入报告。'
-  if [ "$SOURCE_ALREADY_STOPPED" = 1 ]; then
-    warn '按 --source-stopped 跳过服务识别；旧实例必须已停止。'
-  elif [ "$OS" = linux ]; then
-    command -v systemctl >/dev/null || die '找不到 systemctl；请停止旧实例后加 --source-stopped 重试'
+  warn '旧目录将保留；迁移会停止匹配的旧服务并禁用其开机启动，失败时恢复原状态。'
+  if [ "$OS" = linux ] && command -v systemctl >/dev/null; then
     select_source_service
-  else
-    warn '请确认旧人形已停止（包括 Docker/PM2/后台进程）。'
-    ui "$C_OK" '1) 已停止，继续迁移'
+  elif [ "$SOURCE_ALREADY_STOPPED" = 1 ]; then
+    warn '请确保旧实例及其 Docker/PM2/其他启动器的自启动均已禁用。'
+  elif [ "$WIZARD" = 1 ]; then
+    warn '请先停止旧实例，并禁用其 Docker/PM2/launchd 等启动器的自动启动。'
+    ui "$C_OK" '1) 已停止并禁用自动启动，继续迁移'
     warn '0) 取消'
     ask '请选择 [0-1，回车默认 0]：'
-    case "${ANSWER:-0}" in 1|y|Y) ;; *) die '已取消，请先停止旧实例';; esac
+    case "${ANSWER:-0}" in 1|y|Y) ;; *) die '已取消，请先停止旧实例并禁用自动启动';; esac
+  else
+    die '请先停止旧实例并禁用自启动，然后加 --source-stopped 重试'
   fi
 fi
 WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0; TARGET_START_ATTEMPTED=0
@@ -157,6 +171,12 @@ cleanup() {
     fi
     if [ "$UNIT_CHANGED" = 1 ]; then
       if [ "$HAD_UNIT" = 1 ]; then cp "$WORK/unit" "$UNIT"; else rm -f "$UNIT"; fi
+    fi
+    if [ "$SOURCE_DISABLED" = 1 ] && [ "$SAFE_TO_RESUME" = 1 ]; then
+      case "$SOURCE_ENABLE_STATE" in
+        enabled) systemctl enable "$SOURCE_SERVICE" || { error "旧服务自启动恢复失败：$SOURCE_SERVICE"; SAFE_TO_RESUME=0; };;
+        enabled-runtime) systemctl enable --runtime "$SOURCE_SERVICE" || { error "旧服务自启动恢复失败：$SOURCE_SERVICE"; SAFE_TO_RESUME=0; };;
+      esac
     fi
     if [ "$SOURCE_STOPPED" = 1 ]; then
       if [ "$SAFE_TO_RESUME" = 1 ]; then systemctl start "$SOURCE_SERVICE" || error "旧服务恢复失败：$SOURCE_SERVICE"
@@ -186,6 +206,13 @@ if [ "$SERVICE" = 1 ] && [ -f "$UNIT" ]; then
 fi
 if [ -n "$SOURCE_SERVICE" ]; then
   source_matches "$SOURCE_SERVICE" || die '旧服务工作目录已变化，未停止服务'
+  SOURCE_ENABLE_STATE=$(systemctl show "$SOURCE_SERVICE" -p UnitFileState --value) || die '无法查询旧服务自启动状态，拒绝迁移'
+  case "$SOURCE_ENABLE_STATE" in
+    enabled|enabled-runtime|disabled|masked) ;;
+    *) die '旧服务由其他单元或启动器管理，请先禁用其自动启动后重试';;
+  esac
+  SOURCE_TRIGGERS=$(systemctl show "$SOURCE_SERVICE" -p TriggeredBy --value) || die '无法核验旧服务触发器'
+  [ -z "$SOURCE_TRIGGERS" ] || die "旧服务存在触发器 $SOURCE_TRIGGERS，请先停用并移除触发关系后迁移"
   OLD_STATE=$(systemctl show "$SOURCE_SERVICE" -p ActiveState --value) || die '无法查询旧服务状态，拒绝迁移'
   case "$OLD_STATE" in
     active|activating|reloading|deactivating) SOURCE_STOPPED=1;;
@@ -195,6 +222,13 @@ if [ -n "$SOURCE_SERVICE" ]; then
   systemctl stop "$SOURCE_SERVICE"
   OLD_STATE=$(systemctl show "$SOURCE_SERVICE" -p ActiveState --value) || die '无法确认旧服务已停止'
   [ "$OLD_STATE" = inactive ] || die '旧服务未完全停止，拒绝迁移'
+  if [ "$SOURCE_ENABLE_STATE" != masked ]; then
+    SOURCE_DISABLED=1
+    systemctl disable "$SOURCE_SERVICE"
+    if [ "$SOURCE_ENABLE_STATE" = enabled-runtime ]; then systemctl disable --runtime "$SOURCE_SERVICE"; fi
+    SOURCE_AFTER=$(systemctl show "$SOURCE_SERVICE" -p UnitFileState --value) || die '无法确认旧服务自启动已禁用'
+    case "$SOURCE_AFTER" in disabled|masked) ;; *) die '旧服务自启动未成功禁用，拒绝迁移';; esac
+  fi
 fi
 mkdir -p "$ROOT"
 [ -z "$MIGRATE" ] || info "正在迁移 $FROM 配置、会话和数据…"
@@ -254,5 +288,5 @@ warn "本地配置检查通过；请在 Telegram 执行 .ping 确认连接。"
 if [ -n "$MIGRATE" ]; then
   success "迁移完成。旧部署保留在：$MIGRATE"
   info "迁移报告：$ROOT/migration-report.json"
-  if [ -n "$SOURCE_SERVICE" ]; then warn "旧服务保持停止：${SOURCE_SERVICE}；旧服务自启动设置未更改，请避免重启服务器后双实例运行。"; fi
+  if [ -n "$SOURCE_SERVICE" ]; then success "旧服务已停止并禁用开机启动：${SOURCE_SERVICE}"; fi
 fi

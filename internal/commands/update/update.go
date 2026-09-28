@@ -1,4 +1,4 @@
-// Package update checks release tags and rebuilds the host with installed sources.
+// Package update installs verified releases while preserving compiled plugins.
 package update
 
 import (
@@ -33,10 +33,10 @@ type release struct {
 // Register 注册 .update。
 func Register(a *app.App) {
 	repo := a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
-	a.Registry.Register(&command.Command{Name: "update", Description: "检查版本，保留插件源码编译更新", Usage: "[check|run|rollback]", Timeout: 30 * time.Minute,
+	a.Registry.Register(&command.Command{Name: "update", Description: "检查版本，无插件下载更新，有插件保留源码编译", Usage: "[check|run|rollback]", Timeout: 30 * time.Minute,
 		Help: func(prefix string) string {
 			return "<b>程序更新</b>\n" + command.Code(prefix+"update") + " 当前版本与回滚状态\n" + command.Code(prefix+"update check") + " 读取 GitHub Releases 检查新版本\n" +
-				command.Code(prefix+"update run") + " 获取发布标签源码，携带本地插件编译、检查、替换并重启\n" + command.Code(prefix+"update rollback") + " 恢复上次构建的程序和插件源码并重启（状态数据不回退）\n发布仓库由 " + command.Code("MIBOT_UPDATE_REPO") + " 指定。\n需要 Go（满足新版 go.mod）和 Git，以及源码/依赖下载网络；不依赖 Node.js。手动插件源码与版本原样保留，远程插件也不会随主程序更新自动升级。编译或检查失败保留当前程序。插件更新请用 tpm update；手动插件用 tpm replace。首次可用 LAOWANGBOT_SOURCE 指定本地源码进行插件编译。Windows 暂不支持源码自编译替换，请外部构建后停止服务手动替换。"
+				command.Code(prefix+"update run") + " 无源码插件时下载校验官方二进制；有源码插件时限流编译、检查、替换并重启\n" + command.Code(prefix+"update rollback") + " 恢复上次构建的程序和插件源码并重启（状态数据不回退）\n发布仓库由 " + command.Code("MIBOT_UPDATE_REPO") + " 指定。\n无源码插件时只需下载权限；源码插件更新需要 Go（满足新版 go.mod）和 Git，以及源码/依赖下载网络；不依赖 Node.js。手动插件源码与版本原样保留，远程插件也不会随主程序更新自动升级。编译或检查失败保留当前程序。插件更新请用 tpm update；手动插件用 tpm replace。首次可用 LAOWANGBOT_SOURCE 指定本地源码进行插件编译。Windows 暂不支持源码自编译替换，请外部构建后停止服务手动替换。"
 		},
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
 			binary, err := os.Executable()
@@ -150,7 +150,20 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 	if !newer(a.Version, latest.TagName) {
 		return inv.EditText(ctx, "已是最新版本："+kit.Version(a))
 	}
-	if err = inv.EditText(ctx, "正在获取 "+latest.TagName+" 源码，保留已安装插件并编译主程序；首次编译可能较慢…"); err != nil {
+	sourceRequired, err := sourceplugin.NeedsSourceBuild(a.Root)
+	if err != nil {
+		return err
+	}
+	if !sourceRequired {
+		if err = inv.EditText(ctx, "正在下载并校验 "+latest.TagName+" 官方二进制…"); err != nil {
+			return err
+		}
+		if err = replaceOfficialBinary(ctx, a.Root, binary, latest); err != nil {
+			return inv.EditText(ctx, buildFailure(err))
+		}
+		return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已校验并安装 "+command.Escape(latest.TagName)+" 官方二进制，正在重启…", "更新后重启失败，请手动重启服务。")
+	}
+	if err = inv.EditText(ctx, "正在获取 "+latest.TagName+" 源码，保留已安装插件并限流编译主程序；首次编译可能较慢…"); err != nil {
 		return err
 	}
 	builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Repo: repo}
@@ -165,5 +178,5 @@ func buildFailure(err error) string {
 	if len(detail) > 1800 {
 		detail = append(detail[:1800], []rune("…（诊断已截断）")...)
 	}
-	return "源码更新失败：" + string(detail) + "\n请检查编译环境或插件兼容性；若提示恢复失败，请先保留 .compiled/pending 并修复磁盘问题。"
+	return "程序更新失败：" + string(detail) + "\n请检查下载、校验或编译诊断；若提示恢复失败，请先保留 .compiled/pending 并修复磁盘问题。"
 }

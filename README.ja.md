@@ -48,7 +48,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-移行先は空のディレクトリにし、案内に従って旧インスタンスを停止します。旧ディレクトリは保持します。`API ID:` で止まっている場合は Ctrl+C を押し、上記コマンドに切り替えてください。移行先が空でない場合は内容を確認し、削除しないでください。未対応プラグインは保存されますがコードの適応が必要です。[移行ガイド](docs/migration.md)。
+移行先は空のディレクトリにしてください。Linux では旧 systemd サービスを停止し、自動起動も無効にします。失敗時は元の状態に戻します。他の起動方式は先に旧インスタンスを停止し、自動起動を無効にしてください。旧ディレクトリは保持します。`API ID:` で止まっている場合は Ctrl+C を押し、上記コマンドに切り替えてください。移行先が空でない場合は内容を確認し、削除しないでください。未対応プラグインは保存されますがコードの適応が必要です。[移行ガイド](docs/migration.md)。
 
 ### ソースからの導入と移行
 

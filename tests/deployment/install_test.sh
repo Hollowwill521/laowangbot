@@ -18,12 +18,19 @@ case "$mode" in
 esac
 BOT
 chmod +x "$WORK/fixture"
+mkdir -p "$WORK/mock"
+cat > "$WORK/mock/uname" <<'MOCK'
+#!/usr/bin/env bash
+case "$1" in -s) echo Darwin;; -m) echo arm64;; esac
+MOCK
+chmod +x "$WORK/mock/uname"
+export PATH="$WORK/mock:$PATH"
 mkdir "$WORK/source"
 printf '{"session":"fixture"}\n' > "$WORK/source/config.json"
-bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/fixture" --migrate "$WORK/source" --root "$WORK/new"
+bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/fixture" --source-stopped --migrate "$WORK/source" --root "$WORK/new"
 cmp "$WORK/source/config.json" "$WORK/new/config.json"
 [ -x "$WORK/new/laowangbot" ]
-if bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/fixture" --migrate "$WORK/source" --root "$WORK/new"; then echo 'Occupied migration accepted' >&2; exit 1; fi
+if bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/fixture" --source-stopped --migrate "$WORK/source" --root "$WORK/new"; then echo 'Occupied migration accepted' >&2; exit 1; fi
 cp "$WORK/fixture" "$WORK/v2"; printf '\n# version two\n' >> "$WORK/v2"
 bash "$REPO/scripts/install.sh" --no-service --binary "$WORK/v2" --root "$WORK/new"
 cmp "$WORK/fixture" "$WORK/new/laowangbot.previous"

@@ -183,7 +183,7 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 		return err
 	}
 	candidate := filepath.Join(stage, "binary")
-	cmd := exec.CommandContext(ctx, goBinary, "build", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
+	cmd := exec.CommandContext(ctx, goBinary, "build", "-p", "1", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
 	cmd.Dir = source
 	cmd.Env = buildEnv()
 	if err = run(cmd); err != nil {
@@ -218,12 +218,14 @@ func buildEnv() []string {
 	for _, s := range os.Environ() {
 		name, _, _ := strings.Cut(s, "=")
 		switch name {
-		case "CGO_ENABLED", "GOWORK", "GOFLAGS", "GOOS", "GOARCH":
+		case "CGO_ENABLED", "GOWORK", "GOFLAGS", "GOOS", "GOARCH", "GOMAXPROCS", "GOMEMLIMIT", "GOGC":
 			continue
 		}
 		out = append(out, s)
 	}
-	return append(out, "CGO_ENABLED=0", "GOWORK=off", "GOFLAGS=")
+	// These limits apply only to the compiler/linker subprocess tree, never to
+	// the running bot. GOMEMLIMIT is a GC target, not an RSS or kernel hard limit.
+	return append(out, "CGO_ENABLED=0", "GOWORK=off", "GOFLAGS=", "GOMAXPROCS=1", "GOMEMLIMIT=384MiB", "GOGC=50")
 }
 func (b Builder) clone(ctx context.Context, dest, tag string) error {
 	if !strings.HasPrefix(tag, "v") {

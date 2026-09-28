@@ -21,9 +21,9 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 .\scripts\install.ps1 -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-向导先询问旧人形和旧部署目录。Linux 随后按实际 WorkingDirectory 自动匹配 systemd 服务：一个匹配自动选中，多个匹配列数字菜单，未匹配才提示服务名（提供对应旧人形默认值）。服务列表中的别名会去重，停止前再次核验目录。旧 Docker/PM2/后台实例请先自行停止，并使用 `--source-stopped` 跳过识别；macOS 仍用数字确认已停止。脚本不会猜测或终止无关进程。
+向导先询问旧人形和旧部署目录。Linux 随后按实际 WorkingDirectory 自动匹配 systemd 服务：一个匹配自动选中，多个匹配列数字菜单，未匹配才提示服务名（提供对应旧人形默认值）。服务列表中的别名会去重，停止前再次核验目录。Linux 的 `--migrate` 和 `--source-stopped` 同样检查匹配的 systemd 服务；手动停止不代表已禁用自启动。多个匹配服务中，未选中的服务必须已停止且禁用。旧 Docker/PM2/后台实例及 macOS 启动器请先自行停止并禁用自动启动，再使用 `--source-stopped`。脚本不会猜测或终止无关进程。
 
-脚本自动下载并校验 laowangbot，迁移配置、会话、已支持数据和插件清单，检查新部署并安装后台任务。旧目录保留；无法直接运行的旧插件归档在 `legacy/`，需自行适配代码。失败时尝试恢复由脚本停止的旧 systemd 服务；无法确认新服务已经停止时，不启动旧服务，避免双实例运行。成功后旧 systemd 服务保持停止，其开机自启动配置不会被修改，请避免重启服务器后自动启动旧实例。
+脚本自动下载并校验 laowangbot，迁移配置、会话、已支持数据和插件清单，检查新部署并安装后台任务。旧目录保留；无法直接运行的旧插件归档在 `legacy/`，需自行适配代码。迁移前记录旧 systemd 服务的运行及自启动状态，停止并禁用其开机启动后再迁移。失败时恢复原自启动状态，只重新启动原先运行的旧服务；无法确认新服务已经停止时，不恢复旧服务，避免双实例运行。成功后旧服务保持停止且禁用，服务器重启也不会随开机启动。由 timer/socket 等触发的服务必须先停用触发器，脚本检测到触发关系时会拒绝迁移。
 
 本机已有二进制时可加 `--binary /path/to/laowangbot`（Windows 为 `-Binary`），无人值守沿用 `--migrate 旧目录 --from 类型`。远程单条迁移命令见 README，或在原安装命令末尾加 `--wizard` / `-Wizard`。
 

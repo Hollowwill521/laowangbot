@@ -48,7 +48,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-Use an empty destination and stop the old instance as prompted. The source directory is preserved. If you are at `API ID:`, press Ctrl+C and use the commands above. Inspect a nonempty destination instead of deleting it. Unknown plugins are archived and still require code adaptation. See the [migration guide](docs/migration.md).
+Use an empty destination. Linux migration stops and disables the old systemd service, restoring its original state on failure. For other launchers, stop the old instance and disable automatic startup first. The source directory is preserved. If you are at `API ID:`, press Ctrl+C and use the commands above. Inspect a nonempty destination instead of deleting it. Unknown plugins are archived and still require code adaptation. See the [migration guide](docs/migration.md).
 
 ### Source installation and migration
 

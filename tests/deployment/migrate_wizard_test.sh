@@ -19,6 +19,12 @@ case "$mode" in
 esac
 BOT
 chmod +x "$WORK/fixture"
+cat > "$WORK/mock/uname" <<'MOCK'
+#!/usr/bin/env bash
+case "$1" in -s) echo Darwin;; -m) echo arm64;; esac
+MOCK
+chmod +x "$WORK/mock/uname"
+export PATH="$WORK/mock:$PATH"
 for choice in 1 2 3; do
  printf '%s\n%s\n%s\n' "$choice" "$WORK/old bot" 1 | WIZARD_LOG="$WORK/log" bash "$REPO/scripts/install.sh" --wizard --no-service --binary "$WORK/fixture" --root "$WORK/new-$choice" --source-stopped
  cmp "$WORK/old bot/config.json" "$WORK/new-$choice/config.json"
@@ -40,10 +46,14 @@ cat > "$WORK/mock/systemctl" <<'MOCK'
 printf '%s\n' "$*" >> "$SERVICE_LOG"
 case "$1" in
  show)
-   if [ "$4" = WorkingDirectory ]; then printf '%s\n' "$SOURCE_ROOT"
+   if [ "$4" = TriggeredBy ]; then echo "${SOURCE_TRIGGERS:-}"
+   elif [ "$4" = UnitFileState ]; then if [ -f "$STOP_FILE.disabled" ]; then echo disabled; else echo "${SOURCE_ENABLED:-enabled}"; fi
+   elif [ "$4" = WorkingDirectory ]; then printf '%s\n' "$SOURCE_ROOT"
    elif [ -f "$STOP_FILE" ]; then echo inactive
    else echo "${SOURCE_STATE:-active}"; fi;;
  is-active) [ "${SOURCE_STATE:-active}" = active ] && test ! -f "$STOP_FILE";;
+ disable) touch "$STOP_FILE.disabled";;
+ enable) rm -f "$STOP_FILE.disabled";;
  stop) touch "$STOP_FILE";;
  start) rm -f "$STOP_FILE";;
 esac
@@ -86,7 +96,11 @@ cat > "$WORK/mock/systemctl" <<'MOCK'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$SERVICE_LOG"
 case "$1" in
- show) if [ "$4" = WorkingDirectory ]; then echo "$SOURCE_ROOT"; elif [ -f "$STOP_FILE" ]; then echo inactive; else echo active; fi;;
+ show) if [ "$4" = TriggeredBy ]; then echo "${SOURCE_TRIGGERS:-}"
+   elif [ "$4" = UnitFileState ]; then if [ -f "$STOP_FILE.disabled" ]; then echo disabled; else echo "${SOURCE_ENABLED:-enabled}"; fi
+   elif [ "$4" = WorkingDirectory ]; then echo "$SOURCE_ROOT"; elif [ -f "$STOP_FILE" ]; then echo inactive; else echo active; fi;;
+ disable) touch "$STOP_FILE.disabled";;
+ enable) rm -f "$STOP_FILE.disabled";;
  stop) [ "$2" != laowangbot ] || exit 5; touch "$STOP_FILE";;
  start) rm -f "$STOP_FILE";;
 esac
