@@ -75,8 +75,9 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 	if err := b.absolutePaths(); err != nil {
 		return err
 	}
-	if _, err := exec.LookPath("go"); err != nil {
-		return errors.New("Go toolchain is required to compile source plugins")
+	goBinary, err := findGo()
+	if err != nil {
+		return err
 	}
 	lock, err := b.lock()
 	if err != nil {
@@ -182,7 +183,7 @@ func (b Builder) run(ctx context.Context, tag string, mutate func(plugin.Manager
 		return err
 	}
 	candidate := filepath.Join(stage, "binary")
-	cmd := exec.CommandContext(ctx, "go", "build", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
+	cmd := exec.CommandContext(ctx, goBinary, "build", "-mod=readonly", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", candidate, "./cmd/laowangbot")
 	cmd.Dir = source
 	cmd.Env = buildEnv()
 	if err = run(cmd); err != nil {

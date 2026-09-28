@@ -179,3 +179,17 @@ func TestTPMUpdateBuiltinsAndUnknownHaveDistinctGuidance(t *testing.T) {
 		t.Fatal(m.calls)
 	}
 }
+
+func TestTPMAllFailedDoesNotClaimInstalled(t *testing.T) {
+	m := &memoryTPM{fail: map[string]error{"qdsg": errors.New("Go toolchain missing")}}
+	r, e := executeTPM(t.Context(), m, []string{"install", "qdsg"}, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(r.Text, "已完成成功项") || strings.Contains(r.Text, "重启后生效") {
+		t.Fatal(r.Text)
+	}
+	if !strings.Contains(r.Text, "无需重启") {
+		t.Fatal(r.Text)
+	}
+}

@@ -81,3 +81,18 @@ go run ./cmd/plugin-catalog --tag v0.1.2 --output plugins/catalog.json
 协议 1 的独立进程包、Shell/Python 启动器、原 TeleBox `.ts` 文件不能直接安装。将逻辑改为上述 Go 包接口，资源嵌入二进制，并把数据写入构造器给定的 `stateDir`。旧目录仅提示迁移，可卸载或用新源码包显式替换；不会自动运行旧可执行文件。
 
 `qdsg` 的本地 OCR Python 脚本已通过 `go:embed` 打包；选择该模式仍需自行配置 Python、ddddocr、OpenCV 和 NumPy，源码编译不会安装这些运行依赖。
+
+## 服务找不到 Go
+
+源码插件安装需要 Go 1.26+ 和 Git。systemd 的 PATH 不会读取 `.bashrc`：终端能运行 Go，不代表服务也能运行。0.1.5 起会额外探测 `/usr/local/go/bin/go` 等标准安装位置，也支持通过**进程环境** `LAOWANGBOT_GO` 指定绝对路径。
+
+已有 Go 的 Linux 服务可配置：
+
+```sh
+sudo mkdir -p /etc/systemd/system/laowangbot.service.d
+printf '[Service]\nEnvironment="PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' | sudo tee /etc/systemd/system/laowangbot.service.d/20-go-path.conf
+sudo systemctl daemon-reload
+sudo systemctl restart laowangbot
+```
+
+再执行 `.tpm install qdsg`。如果 `/usr/local/go/bin/go version` 本身不存在，需先安装 Go；仅修改 PATH 不会安装工具链。

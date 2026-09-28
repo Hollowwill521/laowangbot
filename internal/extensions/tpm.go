@@ -229,5 +229,8 @@ func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(
 	if action == "remove" {
 		footer = "插件数据保留；重启后停止加载卸载的插件"
 	}
+	if success == 0 {
+		footer = "本次没有变更，无需重启；请处理上述失败或跳过原因后重试"
+	}
 	return tpmResult{Text: title + "\n" + strings.Join(rows, "\n") + "\n\n" + footer}, nil
 }
