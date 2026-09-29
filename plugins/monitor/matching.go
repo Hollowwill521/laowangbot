@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	api "github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 	"github.com/dlclark/regexp2"
@@ -356,12 +357,17 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 		}
 	}
 	keyboard := [][]map[string]string{}
-	tip := "🚨 <b>关键词提醒</b> [<code>" + html.EscapeString(matched) + "</code>]"
+	tip := "🚨 <b>关键词提醒</b> [<code>" + html.EscapeString(shortText(matched, 256)) + "</code>]"
 	if kw != "" {
 		id := strconv.FormatInt(time.Now().UnixNano(), 36)
 		m.state.Pending[id] = Action{TargetChatID: target, Keyword: kw, SourceChatID: msg.ChatID, Time: time.Now().UnixMilli()}
 		keyboard = append(keyboard, []map[string]string{{"text": "🚀 一键参加 (自动触发集群全员跟随)", "callback_data": "send_" + id}})
-		tip += "\n\n🛡️ <b>群友代发指令 (点击复制):</b>\n<code>" + html.EscapeString(".monitor sync "+target+" "+msg.ChatID+" "+kw) + "</code>"
+		command := html.EscapeString(".monitor sync " + target + " " + msg.ChatID + " " + kw)
+		if len(command) < 2000 {
+			tip += "\n\n🛡️ <b>群友代发指令 (点击复制):</b>\n<code>" + command + "</code>"
+		} else {
+			tip += "\n代发指令过长，请使用参加按钮。"
+		}
 	}
 	if origin := m.origin(ctx, msg); origin != nil {
 		keyboard = append(keyboard, []map[string]string{origin})
@@ -372,30 +378,39 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 	if err = m.save(); err != nil {
 		return err
 	}
+	var notificationErrors []error
 	for _, t := range s.TargetGroups {
 		if s.BotToken != "" {
 			payload := map[string]any{"chat_id": t.ID, "text": tip, "parse_mode": "HTML", "disable_web_page_preview": true, "reply_markup": map[string]any{"inline_keyboard": keyboard}}
-			if _, err := m.bot(ctx, "sendMessage", payload); err != nil && strings.Contains(err.Error(), "network failure") {
-				b, _ := json.Marshal(payload)
-				m.state.Jobs = append(m.state.Jobs, Job{Kind: "bot_retry", Due: time.Now().Add(500 * time.Millisecond).UnixMilli(), Payload: b, Attempt: 1})
-				if err = m.save(); err != nil {
-					return err
+			if _, err := m.bot(ctx, "sendMessage", payload); err != nil {
+				notificationErrors = append(notificationErrors, err)
+				if strings.Contains(err.Error(), "network failure") {
+					b, _ := json.Marshal(payload)
+					m.state.Jobs = append(m.state.Jobs, Job{Kind: "bot_retry", Due: time.Now().Add(500 * time.Millisecond).UnixMilli(), Payload: b, Attempt: 1})
+					if err = m.save(); err != nil {
+						return err
+					}
 				}
 			}
 		} else {
-			_, _ = m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: tip, HTML: true})
+			if _, err := m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: tip, HTML: true}); err != nil {
+				notificationErrors = append(notificationErrors, err)
+			}
 		}
 		if _, err = m.call(ctx, api.Call{Method: "forward", Target: t.ID, User: msg.ChatID, IDs: []int{msg.ID}}); err != nil {
-			fallback := html.EscapeString(text)
+			fallback := text
 			if fallback == "" {
 				fallback = "[多媒体消息]"
 			}
-			if _, err = m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: "⚠️ <b>转发受限 (原消息受保护)</b>\n\n" + fallback, HTML: true}); err != nil {
-				return err
+			for _, part := range escapedChunks(fallback, 3000) {
+				if _, err = m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: "⚠️ <b>无法转发原消息</b>\n\n" + part, HTML: true}); err != nil {
+					notificationErrors = append(notificationErrors, err)
+					break
+				}
 			}
 		}
 	}
-	return nil
+	return errors.Join(notificationErrors...)
 }
 func (m *Monitor) dumpSample(msg api.Message, text string) {
 	path := filepath.Join(filepath.Dir(m.path), "lottery-samples.jsonl")

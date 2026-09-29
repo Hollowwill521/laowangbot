@@ -2,7 +2,10 @@ package extensions
 
 import (
 	"encoding/json"
+	"strings"
 
+	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/compiled"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
 	"github.com/OrionG-hub/laowangbot/pkg/pluginapi"
@@ -11,6 +14,24 @@ import (
 )
 
 const bundledSource = "builtin"
+
+// Existing external implementations retain their own help behavior.
+func registerBundledHelp(a *app.App, external []compiled.Entry) {
+	custom := map[string]bool{}
+	for _, entry := range external {
+		custom[entry.Manifest.Name] = true
+	}
+	for name, help := range map[string]string{"monitor": monitor.Help, "qdsg": command.Escape(qdsg.Help)} {
+		if custom[name] {
+			continue
+		}
+		if c, ok := a.Registry.Lookup(name); ok {
+			c.Help = func(prefix string) string {
+				return strings.ReplaceAll(help, "."+name, command.Escape(prefix+name))
+			}
+		}
+	}
+}
 
 // Bundled implementations are separate from the external compiled registry:
 // their presence must never force an official binary update to build from source.

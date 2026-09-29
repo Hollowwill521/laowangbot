@@ -90,7 +90,10 @@ func (p *Plugin) localOCR(ctx context.Context, img []byte) (string, error) {
 	if !r.Success {
 		return "", fmt.Errorf("OCR: %s；请在插件专用 Python 环境安装 ddddocr opencv-python-headless numpy", r.Error)
 	}
-	return r.Result, nil
+	if strings.TrimSpace(r.Result) == "" {
+		return "", errors.New("OCR 返回内容为空")
+	}
+	return strings.TrimSpace(r.Result), nil
 }
 func (p *Plugin) recognize(ctx context.Context, t Task, m api.Message, buttons []api.Button) (string, error) {
 	c := p.snapshot().AI
@@ -172,7 +175,7 @@ func (p *Plugin) recognize(ctx context.Context, t Task, m api.Message, buttons [
 			Content struct{ Parts []struct{ Text string } }
 		}
 		_ = json.Unmarshal(response["candidates"], &cs)
-		if len(cs) > 0 && len(cs[0].Content.Parts) > 0 && cs[0].Content.Parts[0].Text != "" {
+		if len(cs) > 0 && len(cs[0].Content.Parts) > 0 && strings.TrimSpace(cs[0].Content.Parts[0].Text) != "" {
 			return strings.TrimSpace(cs[0].Content.Parts[0].Text), nil
 		}
 	} else {
@@ -189,7 +192,7 @@ func (p *Plugin) recognize(ctx context.Context, t Task, m api.Message, buttons [
 		}
 		var cs []struct{ Message struct{ Content string } }
 		_ = json.Unmarshal(response["choices"], &cs)
-		if len(cs) > 0 && cs[0].Message.Content != "" {
+		if len(cs) > 0 && strings.TrimSpace(cs[0].Message.Content) != "" {
 			return strings.TrimSpace(cs[0].Message.Content), nil
 		}
 	}

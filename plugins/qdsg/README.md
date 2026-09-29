@@ -9,7 +9,7 @@
 - 模式：text、reply、inline、imagechoice、xigua、math（calc）、appcf（app_cf/app-cf）、moon。默认 text；仅指定机器人时默认发送“签到”并随机延迟 0–1 分钟。
 - `ai provider "提示词"`；steps N；retry N；interval 分钟；裸数字为等待毫秒；random 最大分钟或 random 最小-最大分钟。末尾未解析文本为备注。
 - list/ls 展示全部配置、下次执行时间及上次结果。
-- now ID/范围/all 排队执行；结果通过通知和 list 获取。支持 1-3,5、空格分隔、机器人或备注匹配。
+- now ID/范围/all 排队执行；在原命令消息持续更新排队、执行中和完成/失败，批量任务合并展示，手动执行不发收藏通知；完整结果保留在 list。支持 1-3,5、空格分隔、机器人或备注匹配。
 - rm、enable、disable 使用相同选择语法。
 - edit/set ID/范围/all 属性 值：cron/time、bot、mode、cmd/command、wait、random、remark/note、ai/useai、provider/aiprovider、prompt/aiprompt、steps、retry/retrycount、interval/retryinterval、aitype/aitarget。
 - aitype 支持 auto、text、image；random off 关闭延迟；ai on/off 控制识别。
@@ -32,7 +32,7 @@
 | appcf | 一步或两步应用入口，请求 Telegram 签名 WebView URL，再交 CF 外援 |
 | moon | 识别多轮文字或图片，刷新键盘并监测文本/按钮变化，要求机器人最终确认 |
 
-所有模式以新消息 ID 或同一消息文本/键盘变化判断新回复，不能把旧成功消息当本次结果。原版 Moon/普通文本“流程结束即成功”改为收到明确成功确认；缺少确认报超时。配置 wait=0 时不发默认 /start（reply/inline/appcf）；继承旧 sendStart 字段。
+所有模式以新消息 ID 或同一消息文本/键盘变化判断新回复，不能把旧成功消息当本次结果。点击内联按钮时也检查 Telegram 回调提示（toast）：明确成功/失败即结束；一般提示继续等待新回复。原版 Moon/普通文本“流程结束即成功”改为收到明确成功确认；缺少确认报超时。配置 wait=0 时不发默认 /start（reply/inline/appcf）；继承旧 sendStart 字段。
 
 ## OCR 与 CF
 
@@ -51,7 +51,7 @@ CF 保留 cfbox/pending-<job>.json、solved-<job>.json 本机信箱和 https://a
 
 ## 生命周期与验证边界
 
-单工作线程、最多 64 个运行/排队任务；同 ID 不重入。每轮最多 4 分钟；重试在队列中延期，随机延迟不阻塞其他任务。删除/禁用会跳过尚未开始的任务，正在进行的一轮可继续结束；停止插件取消当前请求。计划由 Go cron 秒级解析，使用运行环境本地时区。插件需宿主 0.1.1 host bridge；manifest 声明最小方法权限。
+单工作线程、最多 64 个运行/排队任务；同 ID 不重入。每轮最多 4 分钟；重试在队列中延期，随机延迟不阻塞其他任务。删除/禁用会跳过尚未开始的任务，正在进行的一轮可继续结束；停止插件取消当前请求。定时任务继续使用 notify 配置通知。计划由 Go cron 秒级解析，使用运行环境本地时区。插件需宿主 0.1.1 host bridge；manifest 声明最小方法权限。
 
 解析边界：Go RE2 正则不支持 JS 的 lookaround/backreference；不匹配时给出找不到按钮错误。任务 steps 1–30、retry 0–100、单次 wait 0–60000ms，拒绝超界值。外部 OCR 准确性、机器人协议变化、真实 Telegram/WebView 与 CF 外援均需部署后实测。
 

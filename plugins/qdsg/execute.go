@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-var successRE = regexp.MustCompile("(?i)签到成功|今日已经签到|已经签到|已签到|success|获得了?\\s*[0-9]+\\s*积分")
-var failureRE = regexp.MustCompile("签到失败|验证失败|回答错误|选择错误|已过期|验证超时|不正确|重新生成")
+var successRE = regexp.MustCompile("(?i)签到成功|今日已经签到|已经签到|已签到|\\bsuccess(?:ful(?:ly)?)?\\b|获得了?\\s*[0-9]+\\s*积分")
+var failureRE = regexp.MustCompile("(?i)\\bunsuccessful(?:ly)?\\b|\\bnot\\s+(?:a\\s+)?success(?:ful(?:ly)?)?\\b|未签到成功|签到未成功|签到不成功|签到失败|验证失败|回答错误|选择错误|已过期|验证超时|不正确|重新生成")
 
 func arithmetic(s string) (string, bool) {
 	s = strings.NewReplacer("×", "*", "✕", "*", "✖", "*", "÷", "/", "−", "-", "–", "-", "—", "-", "＋", "+").Replace(s)
@@ -191,12 +191,37 @@ func (p *Plugin) send(ctx context.Context, bot, text string) error {
 	_, e := p.host.Call(ctx, api.Call{Method: "send", Target: bot, Text: text})
 	return e
 }
+
+// callbackSuccess unwinds nested button workflows when Telegram confirms in a toast only.
+type callbackSuccess string
+
+func (s callbackSuccess) Error() string { return string(s) }
+
+var errButtonNotFound = errors.New("找不到按钮")
+
+func callbackOutcome(result string, err error) (string, error) {
+	var success callbackSuccess
+	if errors.As(err, &success) {
+		return string(success), nil
+	}
+	return result, err
+}
 func (p *Plugin) click(ctx context.Context, bot string, m api.Message, b api.Button) error {
 	if len(b.Data) == 0 && (b.Kind == "reply" || b.Kind == "KeyboardButton" || b.Kind == "text") {
 		return p.send(ctx, bot, b.Text)
 	}
-	_, e := p.host.Call(ctx, api.Call{Method: "click", Target: bot, MessageID: m.ID, Row: b.Row, Column: b.Column})
-	return e
+	r, e := p.host.Call(ctx, api.Call{Method: "click", Target: bot, MessageID: m.ID, Row: b.Row, Column: b.Column})
+	if e != nil {
+		return e
+	}
+	result, err := terminal([]api.Message{{Text: r.Text}})
+	if err != nil {
+		return err
+	}
+	if result != "" {
+		return callbackSuccess(result)
+	}
+	return nil
 }
 func (p *Plugin) entry(ctx context.Context, t Task, ms []api.Message, cmd string, app bool) (api.Message, api.Button, error) {
 	for _, m := range ms {
@@ -221,7 +246,7 @@ func (p *Plugin) entry(ctx context.Context, t Task, ms []api.Message, cmd string
 			}
 		}
 	}
-	return api.Message{}, api.Button{}, fmt.Errorf("找不到按钮 %q", cmd)
+	return api.Message{}, api.Button{}, fmt.Errorf("%w %q", errButtonNotFound, cmd)
 }
 func cfURL(m api.Message) string {
 	for _, b := range m.Buttons {
@@ -279,7 +304,7 @@ func (p *Plugin) Execute(ctx context.Context, t Task) (string, error) {
 		var e error
 		for i := 0; i < steps; i++ {
 			var s string
-			s, e = p.executeAttempt(ctx, t)
+			s, e = callbackOutcome(p.executeAttempt(ctx, t))
 			if e == nil {
 				return s, nil
 			}
@@ -294,7 +319,7 @@ func (p *Plugin) Execute(ctx context.Context, t Task) (string, error) {
 		}
 		return "", e
 	}
-	return p.executeAttempt(ctx, t)
+	return callbackOutcome(p.executeAttempt(ctx, t))
 }
 func (p *Plugin) executeAttempt(ctx context.Context, t Task) (string, error) {
 	ms, e := p.history(ctx, t.Bot)
@@ -373,7 +398,7 @@ func (p *Plugin) executeAttempt(ctx context.Context, t Task) (string, error) {
 		return p.solveCF(ctx, t, u, b.Text, t.Secondary != "", initial, 120*time.Second)
 	case "inline_button", "moon", "math", "xigua_sequence":
 		if t.Command != "" && t.Command != "auto" && t.Command != "none" {
-			if _, _, e = p.entry(ctx, t, ms, t.Command, false); e != nil && t.Mode != "moon" {
+			if _, _, e = p.entry(ctx, t, ms, t.Command, false); e != nil && (t.Mode != "moon" || !errors.Is(e, errButtonNotFound)) {
 				return "", e
 			}
 		}

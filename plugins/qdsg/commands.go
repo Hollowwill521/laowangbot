@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	api "github.com/OrionG-hub/laowangbot/pkg/pluginapi"
+	"maps"
 	"math"
 	"net/url"
 	"regexp"
@@ -33,7 +34,7 @@ math 会解析“请计算：94 + 3 = ?”等加减乘除算式并回复数字�
 
 高级参数可任意组合：
 • ai [provider] ["提示词"]：启用 AI，例如 ai local 或 ai openai "提取数字"
-• steps N：Moon/inline AI 连环识别最大步数（1–30）
+• steps N：Moon AI 最大识别步数 / inline AI 最大尝试次数（1–30）
 • retry N：失败后完整重跑次数（0–100）
 • interval 分钟：重试间隔
 • 裸数字：操作等待毫秒（0–60000，默认 2000）
@@ -54,7 +55,7 @@ ai on/off 开关识别；aitype 支持 auto、text、image。
 .qdsg reorder 重置任务编号；reload 重新加载配置和定时器。
 
 🚀 4. 执行与测试
-.qdsg now [ID/范围/all] 立即排队执行任务。
+.qdsg now [ID/范围/all] 立即排队执行任务，原消息更新排队、执行中和完成/失败；手动任务不发收藏通知。
 .qdsg test [provider] [提示词]：回复一条图片或文本消息测试 AI 解析。
 
 ⚙️ 5. 系统配置
@@ -93,6 +94,9 @@ func randomRange(s string) (int, int, error) {
 	}
 	lo := 0.
 	hi, e := strconv.ParseFloat(a[0], 64)
+	if e != nil {
+		return 0, 0, errors.New("随机范围无效（分钟）")
+	}
 	if len(a) == 2 {
 		lo = hi
 		hi, e = strconv.ParseFloat(a[1], 64)
@@ -153,6 +157,9 @@ func edit(t *Task, key, value string) error {
 		t.Cron, e = cronValue(value)
 		return e
 	case "bot":
+		if strings.TrimSpace(botName(value)) == "" {
+			return errors.New("机器人不能为空")
+		}
 		t.Bot = botName(value)
 		t.ChatID = ""
 	case "mode":
@@ -177,6 +184,9 @@ func edit(t *Task, key, value string) error {
 			return errors.New("wait 必须为 0–60000 毫秒")
 		}
 		t.Wait = n
+		if t.Mode == "reply_button" || t.Mode == "inline_button" || t.Mode == "app_cf" {
+			t.SendStart = n > 0
+		}
 	case "random":
 		if value == "off" || value == "false" || value == "0" {
 			t.Random = false
@@ -245,7 +255,9 @@ func parseAdd(a []string) (Task, error) {
 	if e != nil {
 		return t, e
 	}
-	t.Bot = botName(a[i])
+	if e = edit(&t, "bot", a[i]); e != nil {
+		return t, e
+	}
 	a = a[i+1:]
 	if len(a) == 0 {
 		t.Random = true
@@ -272,7 +284,7 @@ func parseAdd(a []string) (Task, error) {
 		switch key {
 		case "ai":
 			t.AI = true
-			if i+1 < len(a) {
+			if i+1 < len(a) && !strings.HasPrefix(a[i+1], "\"") && !addOption(a[i+1]) {
 				i++
 				t.Provider = a[i]
 			}
@@ -282,6 +294,9 @@ func parseAdd(a []string) (Task, error) {
 				for !strings.HasSuffix(a[i], "\"") && i+1 < len(a) {
 					i++
 					parts = append(parts, a[i])
+				}
+				if !strings.HasSuffix(a[i], "\"") || (len(parts) == 1 && len(parts[0]) == 1) {
+					return t, errors.New("AI 提示词引号未闭合")
 				}
 				t.Prompt = strings.Trim(strings.Join(parts, " "), "\"")
 			}
@@ -312,13 +327,25 @@ func parseAdd(a []string) (Task, error) {
 	}
 	return t, nil
 }
+func addOption(s string) bool {
+	switch strings.ToLower(s) {
+	case "ai", "steps", "retry", "interval", "random", "aitype":
+		return true
+	}
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+func validHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
+}
 func masked(v string) string {
 	if v != "" {
 		return "********"
 	}
 	return "未设置"
 }
-func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage) (string, error) {
+func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage) (out string, err error) {
 	if len(a) == 0 {
 		return Help, nil
 	}
@@ -345,9 +372,14 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 		return p.recognize(ctx, t, r.Messages[0], nil)
 	}
 	if sub == "now" {
-		ids := selectIDs(p.snapshot().Tasks, a)
+		tasks := p.snapshot().Tasks
+		ids := selectIDs(tasks, a)
 		if len(ids) == 0 {
 			return "", errors.New("未匹配到任务")
+		}
+		var ev api.Event
+		if json.Unmarshal(event, &ev) == nil && ev.ChatID != "" && ev.MessageID > 0 {
+			return p.manualNow(ctx, tasks, ids, ev)
 		}
 		lines := []string{}
 		for id := range ids {
@@ -361,7 +393,36 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 		return strings.Join(lines, "\n"), nil
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	var cancelled []job
+	defer func() {
+		if err == nil {
+			for _, j := range cancelled {
+				if j.State != nil {
+					j.State.Cancelled = true
+				}
+			}
+		}
+		p.mu.Unlock()
+		if err == nil {
+			for _, j := range cancelled {
+				j.Progress.update(p, j.ID, "已取消（任务删除或禁用）")
+			}
+		}
+	}()
+	// A rejected command must not leave unsaved changes active in memory.
+	before := p.db
+	before.Tasks = append([]Task(nil), p.db.Tasks...)
+	before.AI.Custom = append([]Provider(nil), p.db.AI.Custom...)
+	next, pending, running, jobs := maps.Clone(p.next), maps.Clone(p.pending), maps.Clone(p.running), maps.Clone(p.jobs)
+	defer func() {
+		if err != nil {
+			p.db = before
+			p.next = next
+			p.pending = pending
+			p.running = running
+			p.jobs = jobs
+		}
+	}()
 	save := func() (string, error) {
 		if e := p.save(); e != nil {
 			return "", e
@@ -439,6 +500,16 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 		out := []Task{}
 		for _, t := range p.db.Tasks {
 			if ids[t.ID] {
+				if sub != "enable" {
+					if j, ok := p.jobs[t.ID]; ok {
+						cancelled = append(cancelled, j)
+						if j.State == nil || !j.State.Started {
+							delete(p.pending, t.ID)
+							delete(p.running, t.ID)
+							delete(p.jobs, t.ID)
+						}
+					}
+				}
 				if sub == "rm" {
 					delete(p.next, t.ID)
 					continue
@@ -461,7 +532,7 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 				break
 			}
 		}
-		if idx < 1 || idx >= len(a) {
+		if idx < 1 || idx+1 >= len(a) {
 			return "", errors.New("edit ID 属性 值")
 		}
 		ids := selectIDs(p.db.Tasks, a[:idx])
@@ -521,6 +592,9 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 			if len(a) != 5 {
 				return "", errors.New("addcustom ID URL Model Key")
 			}
+			if !validHTTPURL(a[2]) {
+				return "", errors.New("AI Base URL 必须为有效 HTTP/HTTPS 地址")
+			}
 			v := Provider{a[1], a[2], a[3], a[4]}
 			for i, x := range c.Custom {
 				if x.ID == v.ID {
@@ -544,6 +618,12 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 				return "", errors.New("set key value")
 			}
 			v := strings.Join(a[2:], " ")
+			switch a[1] {
+			case "openai_base", "openai_base_url", "gemini_base", "gemini_base_url":
+				if !validHTTPURL(v) {
+					return "", errors.New("AI Base URL 必须为有效 HTTP/HTTPS 地址")
+				}
+			}
 			switch a[1] {
 			case "provider":
 				c.Default = v

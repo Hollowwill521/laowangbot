@@ -211,7 +211,7 @@ func (m *Monitor) reply(ctx context.Context, e api.Event, text string, seconds i
 		var r api.Result
 		r, err = m.call(ctx, api.Call{Method: "send", Target: e.ChatID, ReplyTo: id, Text: text, HTML: true})
 		id = r.MessageID
-		if err == nil {
+		if err == nil && e.MessageID > 0 {
 			_, _ = m.call(ctx, api.Call{Method: "delete", Target: e.ChatID, IDs: []int{e.MessageID}})
 		}
 	}
@@ -269,11 +269,43 @@ func rest(a []string, i int) string {
 	return ""
 }
 func off(s string) bool { return s == "del" || s == "delete" || s == "off" }
-func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string, error) {
+func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (text string, err error) {
+	before, _ := json.Marshal(m.state)
+	pending := m.state.Pending
+	updateID, nextPoll, conflicts := m.state.UpdateID, m.nextPoll, m.conflicts
+	defer func() {
+		if err != nil {
+			var restored State
+			_ = json.Unmarshal(before, &restored)
+			restored.Pending = pending
+			if restored.Suppress == nil {
+				restored.Suppress = map[string]int64{}
+			}
+			m.state = restored
+			m.state.UpdateID, m.nextPoll, m.conflicts = updateID, nextPoll, conflicts
+		}
+	}()
+	if err := validateCommand(a); err != nil {
+		return "", err
+	}
 	s := &m.state.Settings
 	switch arg(a, 0) {
+	case "", "help":
+		return m.help(e.ChatID), nil
 	case "list", "list_groups":
-		return m.details(ctx), nil
+		text := m.details(ctx)
+		if len(text) <= 3800 {
+			return text, nil
+		}
+		body := strings.TrimSuffix(strings.SplitN(text, "<pre>", 2)[1], "</pre>")
+		for i, part := range escapedChunks(html.UnescapeString(body), 3000) {
+			if err := m.reply(ctx, e, fmt.Sprintf("<b>监控配置（第 %d 段）</b>\nBot Token 已设置: %t\n<pre>%s</pre>", i+1, s.BotToken != "", part), 100); err != nil {
+				return "", err
+			}
+			e.Out = false
+			e.MessageID = 0
+		}
+		return "", nil
 	case "clean":
 		n := len(m.state.Dedup)
 		m.state.Dedup = map[string]int64{}
@@ -287,6 +319,7 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 	case "global":
 		s.IsGlobalEnabled = arg(a, 1) == "on"
 	case "sync":
+		e.Text = ".monitor " + strings.Join(a, " ")
 		return "", m.syncCommand(ctx, e)
 	case "send":
 		if arg(a, 1) == "" || rest(a, 2) == "" {
@@ -318,6 +351,9 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 			if off(v) {
 				v = ""
 			}
+			if s.BotToken != v {
+				m.state.UpdateID = 0
+			}
 			s.BotToken = v
 			m.nextPoll = 0
 			m.conflicts = 0
@@ -344,7 +380,10 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 				}
 				s.Keywords = add(s.Keywords, k)
 			} else if v == "del" {
-				s.Keywords = remove(s.Keywords, arg(a, 3))
+				if !canRemove(s.Keywords, rest(a, 3)) {
+					return "", errors.New("关键词不存在")
+				}
+				s.Keywords = remove(s.Keywords, rest(a, 3))
 			}
 		case "monitor_group", "exclude_group":
 			list := &s.EnabledGroups
@@ -358,6 +397,9 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 				}
 				*list = add(*list, id)
 			} else if v == "del" {
+				if !canRemove(*list, arg(a, 3)) {
+					return "", errors.New("群组不存在")
+				}
 				*list = remove(*list, arg(a, 3))
 			}
 		case "target":
@@ -379,6 +421,9 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 				}
 			} else if v == "del" {
 				i, _ := strconv.Atoi(arg(a, 3))
+				if i <= 0 || i > len(s.TargetGroups) {
+					return "", errors.New("目标序号不存在")
+				}
 				if i > 0 && i <= len(s.TargetGroups) {
 					s.TargetGroups = slices.Delete(s.TargetGroups, i-1, i)
 				}
@@ -423,6 +468,9 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (string,
 				}
 				table[id] = add(table[id], value)
 			case "del":
+				if !canRemove(table[id], value) {
+					return "", errors.New("指定条目不存在")
+				}
 				table[id] = remove(table[id], value)
 				if len(table[id]) == 0 {
 					delete(table, id)
@@ -476,7 +524,7 @@ func (m *Monitor) syncCommand(ctx context.Context, e api.Event) error {
 	if !owner && (m.state.Settings.TrustedLeaderID == "" || sender != m.state.Settings.TrustedLeaderID) {
 		return nil
 	}
-	a := strings.Split(e.Text, " ")
+	a := strings.Fields(e.Text)
 	if len(a) < 5 {
 		return nil
 	}
@@ -538,6 +586,9 @@ func (m *Monitor) tick(ctx context.Context) error {
 				j.Due = now + 500
 				m.state.Jobs = append(m.state.Jobs, j)
 			}
+			if err != nil {
+				errs = append(errs, err)
+			}
 			continue
 		}
 		if j.Kind == "delete" {
@@ -546,6 +597,9 @@ func (m *Monitor) tick(ctx context.Context) error {
 				j.Attempt++
 				j.Due = now + 5000
 				m.state.Jobs = append(m.state.Jobs, j)
+			}
+			if err != nil {
+				errs = append(errs, err)
 			}
 			continue
 		}
@@ -561,10 +615,13 @@ func (m *Monitor) tick(ctx context.Context) error {
 			text := "✅ 集群同步执行成功"
 			delay := int64(3000)
 			if err != nil {
-				text = "❌ 同步失败: " + html.EscapeString(err.Error())
+				text = "❌ 同步失败: " + html.EscapeString(shortText(err.Error(), 512))
 				delay = 5000
 			}
 			r, er := m.call(ctx, api.Call{Method: "send", Target: j.Report, Text: text, HTML: true})
+			if er != nil {
+				errs = append(errs, er)
+			}
 			if er == nil {
 				ids := []int{r.MessageID}
 				if err == nil {
