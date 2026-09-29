@@ -100,7 +100,7 @@ func Register(a *app.App) {
 		switch action {
 		case "":
 			return inv.Edit(ctx, "🛠 当前前缀："+quotePrefixes(current)+
-				"\n<i>"+command.Escape(inv.Prefix+"prefix set . ！")+" 修改，"+command.Escape(inv.Prefix+"prefix help")+" 看说明</i>")
+				"\n<i>"+command.Code(inv.Prefix+"prefix set . ！")+" 修改，"+command.Code(inv.Prefix+"prefix help")+" 看说明</i>")
 		case "set", "add", "del":
 		default:
 			return inv.Edit(ctx, prefixHelp(inv.Prefix))

@@ -123,7 +123,7 @@ docker run -d --name laowangbot --restart unless-stopped   -v laowangbot-data:/d
 ./laowangbot --restore /safe/backup.tar.gz --root /path/to/empty-destination
 ```
 
-`.bf` 把相同类型的备份发到收藏夹。新备份标识为 `laowangbot-backup.json`，恢复兼容旧 `mibot-lite-backup.json`。备份含登录会话、`.env` 和内建命令 JSON 状态，等同账号凭据，应私密保存。独立插件、`state/`、`legacy/` 另行备份；不要假定 `.bf` 是整个部署目录的完整镜像。恢复前停止实例，覆盖已有账号必须明确加 `--force`。
+`.bf` 把相同类型的备份发到收藏夹。新备份标识为 `laowangbot-backup.json`，恢复兼容旧 `mibot-lite-backup.json`。备份含登录会话、`.env`、`data/*.json`、`state/<插件>/*.json` 以及 `state/pmcaptcha/legacy/*.json`（待合并的旧配置与记录），等同账号凭据，应私密保存。插件源码、其他嵌套状态、缓存及部署根目录的 `legacy/` 仍需另行备份；不要假定 `.bf` 是整个部署目录的完整镜像。恢复前停止实例，覆盖已有账号必须明确加 `--force`。
 
 真实账号验证可在停止服务后执行 `./laowangbot --verify --root /path/to/deployment`。它会在收藏夹发送、读取并清理测试消息，依赖 Telegram 和第三方服务，不能代替离线测试。当前尚未完成 Linux/Windows/Docker 真实部署与 Telegram 凭据联调。
 

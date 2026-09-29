@@ -101,6 +101,20 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 				if e = sendFor(ctx, inv.Client, response, m); e != nil {
 					return e
 				}
+				if formatted, ok := pluginHelpHTML(response.Text, inv.Prefix); ok {
+					for i, page := range command.HTMLPages(formatted, 4000) {
+						var err error
+						if i == 0 {
+							err = inv.Edit(ctx, page)
+						} else {
+							err = inv.Reply(ctx, page)
+						}
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}
 				if response.Text != "" {
 					return writePluginText(ctx, response.Text,
 						func(text string) error { return inv.EditText(ctx, text) },

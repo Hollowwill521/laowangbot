@@ -6,7 +6,8 @@
 //   - config.json 和 gotd-session.json：账号。有了它们，恢复出来的部署
 //     启动时不用重新登录。
 //   - .env：命令前缀和其他 MIBOT_* 设置。
-//   - data/ 下直接存放的每个 *.json：各个命令的设置，包括 API key。
+//   - data/*.json 和 state/<插件>/*.json：命令和插件配置，包括 API key。
+//   - state/pmcaptcha/legacy/*.json：尚未合并的迁移配置和记录。
 //
 // 其余的都是有意不带的。data/ 的子目录是缓存（eatgif 下载的帧、
 // Speedtest CLI），第一次用到时会自己补回来。updates.json 是某一台机器
@@ -77,18 +78,42 @@ func Create(root, version string, now time.Time) ([]byte, []string, error) {
 			names = append(names, name)
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "data"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, err
-	}
-	for _, entry := range entries {
-		name := "data/" + entry.Name()
-		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") && allowed(name) {
-			names = append(names, name)
+	for _, top := range []string{"data", "state"} {
+		base := filepath.Join(root, top)
+		err := filepath.WalkDir(base, func(full string, entry os.DirEntry, walkErr error) error {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return filepath.SkipDir
+			}
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, e := filepath.Rel(root, full)
+			if e != nil {
+				return e
+			}
+			name := filepath.ToSlash(rel)
+			if entry.Type()&os.ModeSymlink != 0 {
+				return fmt.Errorf("backup symlink rejected: %s", name)
+			}
+			if entry.IsDir() {
+				if name != top && !configurationDirectory(name) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.Type().IsRegular() {
+				if allowed(name) {
+					names = append(names, name)
+				}
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, err
 		}
 	}
 	if len(names) == 0 {
-		return nil, nil, errors.New("nothing to back up: no config.json, .env or data/*.json here")
+		return nil, nil, errors.New("nothing to back up: no account or command/plugin configuration here")
 	}
 	sort.Strings(names)
 
@@ -151,9 +176,48 @@ func allowed(name string) bool {
 			return true
 		}
 	}
-	rest, ok := strings.CutPrefix(name, "data/")
-	return ok && rest != "" && !strings.Contains(rest, "/") &&
-		strings.HasSuffix(rest, ".json") && !strings.HasPrefix(rest, ".")
+	base := path.Base(name)
+	if strings.HasPrefix(base, ".") || !strings.HasSuffix(base, ".json") || strings.Contains(name, "\\") {
+		return false
+	}
+	return configurationDirectory(path.Dir(name))
+}
+
+// Only configuration directories are included; runtime caches and executables are excluded.
+func configurationDirectory(name string) bool {
+	if name == "data" || name == "state/pmcaptcha/legacy" {
+		return true
+	}
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 || parts[0] != "state" || parts[1] == "" || strings.HasPrefix(parts[1], ".") {
+		return false
+	}
+	for _, r := range parts[1] {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// Validate every parent before writing any file, so nested links cannot redirect restore.
+func checkParents(root, name string) error {
+	current := root
+	parts := strings.Split(path.Dir(name), "/")
+	for _, part := range parts {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("restore directory is not a real directory: %s", current)
+		}
+	}
+	return nil
 }
 
 // Restore 把 Create 生成的归档解到 root 下，返回写入的文件名。
@@ -228,6 +292,11 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 	if err := checkDataDirectory(root); err != nil {
 		return nil, err
 	}
+	for name := range files {
+		if err := checkParents(root, name); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.MkdirAll(filepath.Join(root, "data"), 0o700); err != nil {
 		return nil, err
 	}
@@ -237,6 +306,9 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, filepath.FromSlash(name))), 0o700); err != nil {
+			return nil, err
+		}
 		if err := writeAtomic(filepath.Join(root, filepath.FromSlash(name)), files[name]); err != nil {
 			return nil, err
 		}
@@ -273,15 +345,17 @@ func writeAtomic(target string, body []byte) error {
 
 // Do not follow a pre-existing data link while reading or restoring account secrets.
 func checkDataDirectory(root string) error {
-	info, err := os.Lstat(filepath.Join(root, "data"))
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("data must be a real directory, not a link")
+	for _, top := range []string{"data", "state"} {
+		info, err := os.Lstat(filepath.Join(root, top))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New(top + " must be a real directory, not a link")
+		}
 	}
 	return nil
 }

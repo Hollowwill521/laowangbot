@@ -521,8 +521,8 @@ func renderServers(servers []speedServer, pinned int, prefix string) string {
 		sample = strconv.Itoa(pinned)
 	}
 	lines = append(lines, "",
-		"<i>"+command.Escape(prefix+"speedtest "+sample)+" 测这一台，"+
-			command.Escape(prefix+"speedtest set "+sample)+" 设为默认</i>")
+		"<i>"+command.Code(prefix+"speedtest "+sample)+" 测这一台，"+
+			command.Code(prefix+"speedtest set "+sample)+" 设为默认</i>")
 	return strings.Join(lines, "\n")
 }
 

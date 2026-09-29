@@ -50,12 +50,15 @@ ai on/off 开关识别；aitype 支持 auto、text、image。
 
 📋 3. 任务管理
 .qdsg list（或 ls）查看详情、下次执行时间和上次结果。
-.qdsg rm [选择器] 删除；enable [选择器] 恢复；disable [选择器] 暂停。
+.qdsg rm [选择器]：删除
+.qdsg enable [选择器]：恢复
+.qdsg disable [选择器]：暂停。
 选择器支持 ID、范围 1-3,5、@机器人、备注、all。
-.qdsg reorder 重置任务编号；reload 重新加载配置和定时器。
+.qdsg reorder：重置任务编号
+.qdsg reload：重新加载配置和定时器。
 
 🚀 4. 执行与测试
-.qdsg now [ID/范围/all] 立即排队执行任务，原消息更新排队、执行中和完成/失败；手动任务不发收藏通知。
+.qdsg now [ID/范围/all]：立即排队执行任务，原消息更新排队、执行中和完成/失败；手动任务不发收藏通知。
 .qdsg test [provider] [提示词]：回复一条图片或文本消息测试 AI 解析。
 
 ⚙️ 5. 系统配置
@@ -66,7 +69,7 @@ ai on/off 开关识别；aitype 支持 auto、text、image。
 .qdsg aiconfig addcustom [ID] [URL] [Model] [Key]：添加第三方模型。
 .qdsg aiconfig rmcustom [ID]：删除第三方模型。
 
-本地 AI 需 Python 与 ddddocr、opencv-python-headless、numpy；CF 需独立外援。回复验证码使用 .qdsg test local 可检查本地 OCR。
+本地 AI 需 Python 与 ddddocr、opencv-python-headless、numpy；CF 需独立外援。回复验证码使用 .qdsg test local：检查本地 OCR。
 `
 
 var modes = map[string]string{"text": "text", "reply": "reply_button", "reply_button": "reply_button", "inline": "inline_button", "inline_button": "inline_button", "imagechoice": "image_choice", "image_choice": "image_choice", "xigua": "xigua_sequence", "xigua_sequence": "xigua_sequence", "math": "math", "calc": "math", "appcf": "app_cf", "app_cf": "app_cf", "app-cf": "app_cf", "moon": "moon"}

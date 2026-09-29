@@ -17,39 +17,39 @@ func (m *Monitor) help(chat string) string {
 const Help = `<b>Monitor 命令帮助</b>
 
 以下命令均以 <code>.monitor</code> 开头，仅机主可修改设置。
-<code>help</code> 帮助；<code>list</code> / <code>list_groups</code> 配置列表
-<code>on</code> / <code>off</code> 添加/移除当前群监听
-<code>global on|off</code> 总开关
-<code>clean</code> 清空去重记录
-<code>send &lt;目标ID或用户名&gt; &lt;文本&gt;</code> 立即代发
-<code>sync &lt;目标&gt; &lt;备用群&gt; &lt;文本&gt;</code> 延迟同步；仅机主和可信 Leader 可触发
+<code>.monitor help</code> 帮助；<code>.monitor list</code> / <code>.monitor list_groups</code> 配置列表
+<code>.monitor on</code> / <code>.monitor off</code> 添加/移除当前群监听
+<code>.monitor global on|off</code> 总开关
+<code>.monitor clean</code> 清空去重记录
+<code>.monitor send &lt;目标ID或用户名&gt; &lt;文本&gt;</code> 立即代发
+<code>.monitor sync &lt;目标&gt; &lt;备用群&gt; &lt;文本&gt;</code> 延迟同步；仅机主和可信 Leader 可触发
 
 <b>设置（前缀 .monitor set）</b>
-<code>leader &lt;用户ID&gt;|del</code> 可信 Leader
-<code>bot_token &lt;Token&gt;|del</code> 通知机器人
-<code>bot_id &lt;用户ID&gt;|del</code> 排除该机器人消息
+<code>.monitor set leader &lt;用户ID&gt;|del</code> 可信 Leader
+<code>.monitor set bot_token &lt;Token&gt;|del</code> 通知机器人
+<code>.monitor set bot_id &lt;用户ID&gt;|del</code> 排除该机器人消息
 以下设置接 <code>on|off</code>：
-<code>monitor_all_groups</code> 监控所有群
-<code>dedup</code> 24 小时去重
-<code>monitor_admins_messages</code> 管理员消息
-<code>monitor_users_messages</code> 普通用户消息
-<code>ignore_bot_messages</code>：沿用原版，on 监控机器人，off 忽略
+<code>.monitor set monitor_all_groups on|off</code> 监控所有群
+<code>.monitor set dedup on|off</code> 24 小时去重
+<code>.monitor set monitor_admins_messages on|off</code> 管理员消息
+<code>.monitor set monitor_users_messages on|off</code> 普通用户消息
+<code>.monitor set ignore_bot_messages on|off</code>：沿用原版，on 监控机器人，off 忽略
 
-<code>monitor_group add &lt;群ID/用户名/链接&gt;</code>
-<code>monitor_group del &lt;序号或ID&gt;</code>
-<code>exclude_group add &lt;群ID/用户名/链接&gt;</code>
-<code>exclude_group del &lt;序号或ID&gt;</code>
-<code>target add &lt;ID或用户名&gt; [备注]</code> 通知目标
-<code>target del &lt;序号&gt;</code>
-<code>keyword add &lt;关键词&gt;</code> 全局关键词
-<code>keyword del &lt;序号或完整关键词&gt;</code>
-<code>group_keyword add &lt;群&gt; &lt;关键词&gt;</code>
-<code>group_keyword del &lt;群&gt; &lt;序号或完整关键词&gt;</code>
-<code>group_keyword clear &lt;群&gt;</code>
-<code>group_user add &lt;群&gt; &lt;用户ID&gt;</code>
-<code>group_user add &lt;消息链接&gt;</code> 提取发送者
-<code>group_user del &lt;群&gt; &lt;序号或用户ID&gt;</code>
-<code>group_user clear &lt;群&gt;</code>
+<code>.monitor set monitor_group add &lt;群ID/用户名/链接&gt;</code>
+<code>.monitor set monitor_group del &lt;序号或ID&gt;</code>
+<code>.monitor set exclude_group add &lt;群ID/用户名/链接&gt;</code>
+<code>.monitor set exclude_group del &lt;序号或ID&gt;</code>
+<code>.monitor set target add &lt;ID或用户名&gt; [备注]</code> 通知目标
+<code>.monitor set target del &lt;序号&gt;</code>
+<code>.monitor set keyword add &lt;关键词&gt;</code> 全局关键词
+<code>.monitor set keyword del &lt;序号或完整关键词&gt;</code>
+<code>.monitor set group_keyword add &lt;群&gt; &lt;关键词&gt;</code>
+<code>.monitor set group_keyword del &lt;群&gt; &lt;序号或完整关键词&gt;</code>
+<code>.monitor set group_keyword clear &lt;群&gt;</code>
+<code>.monitor set group_user add &lt;群&gt; &lt;用户ID&gt;</code>
+<code>.monitor set group_user add &lt;消息链接&gt;</code> 提取发送者
+<code>.monitor set group_user del &lt;群&gt; &lt;序号或用户ID&gt;</code>
+<code>.monitor set group_user clear &lt;群&gt;</code>
 群支持 ID、用户名或链接；序号从 1 起，按 list 数组顺序。
 普通关键词忽略大小写；正则支持 re:表达式、re:/表达式/flags。
 指定人绕过身份过滤；排除群优先。无 Bot Token 时通知没有交互按钮。

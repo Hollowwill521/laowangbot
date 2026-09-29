@@ -23,23 +23,49 @@ func registerBundledHelp(a *app.App, external []compiled.Entry) {
 	for _, entry := range external {
 		custom[entry.Manifest.Name] = true
 	}
-	for name, help := range map[string]string{"monitor": monitor.Help, "qdsg": command.Escape(qdsg.Help), "bh": command.Escape(bh.Help)} {
+	for name, help := range map[string]string{"monitor": monitor.Help, "qdsg": qdsg.Help, "bh": bh.Help} {
 		if custom[name] {
 			continue
 		}
 		if c, ok := a.Registry.Lookup(name); ok {
 			c.Help = func(prefix string) string {
-				return strings.ReplaceAll(help, "."+name, command.Escape(prefix+name))
+				return bundledHelp(prefix, name, help)
 			}
 		}
 	}
 	if !custom["pmcaptcha"] {
 		for _, name := range []string{"pmc", "pmcaptcha"} {
 			if c, ok := a.Registry.Lookup(name); ok {
-				c.Help = func(prefix string) string { return command.Escape(pmcaptcha.HelpText(prefix, "")) }
+				c.Help = func(prefix string) string { return bundledHelp(prefix, "pmc", pmcaptcha.HelpText(prefix, "")) }
 			}
 		}
 	}
+}
+
+func bundledHelp(prefix, name, text string) string {
+	if name == "monitor" {
+		return strings.ReplaceAll(text, ".monitor", command.Escape(prefix+"monitor"))
+	}
+	text = strings.ReplaceAll(text, "."+name, prefix+name)
+	return command.PlainHelp(text, prefix, name)
+}
+
+// Only known bundled help text is formatted; arbitrary plugin output stays plain.
+func pluginHelpHTML(text, prefix string) (string, bool) {
+	for name, help := range map[string]string{"qdsg": qdsg.Help, "bh": bh.Help} {
+		if strings.Contains(text, help) {
+			before, after, _ := strings.Cut(text, help)
+			return command.Escape(before) + bundledHelp(prefix, name, help) + command.Escape(after), true
+		}
+	}
+	for _, section := range []string{"", "basic", "captcha", "set", "wl", "record"} {
+		help := pmcaptcha.HelpText(".", section)
+		if strings.Contains(text, help) {
+			before, after, _ := strings.Cut(text, help)
+			return command.Escape(before) + bundledHelp(prefix, "pmc", help) + command.Escape(after), true
+		}
+	}
+	return "", false
 }
 
 // Bundled implementations are separate from the external compiled registry:

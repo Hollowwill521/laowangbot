@@ -58,8 +58,8 @@ func renderAliases(aliases map[string]string, prefix string) string {
 	for _, name := range names {
 		lines = append(lines, command.Code(prefix+name)+" → "+command.Code(prefix+aliases[name]))
 	}
-	lines = append(lines, "", "<i>"+command.Escape(prefix+"alias set 别名 原命令")+" 添加，"+
-		command.Escape(prefix+"alias del 别名")+" 删除</i>")
+	lines = append(lines, "", "<i>"+command.Code(prefix+"alias set 别名 原命令")+" 添加，"+
+		command.Code(prefix+"alias del 别名")+" 删除</i>")
 	return strings.Join(lines, "\n")
 }
 

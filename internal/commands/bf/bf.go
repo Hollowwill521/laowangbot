@@ -47,7 +47,7 @@ func backupHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "📦 <b>配置备份</b>\n\n把这个部署的配置打包，发到本账号的收藏夹。重装系统或换机器时用它恢复，不用重新登录，也不用重新配各命令。\n\n" +
 		"• <code>" + p + "bf</code> 打包并发到收藏夹\n\n" +
-		"<b>包含</b>\n登录会话（config.json、gotd-session.json）、.env，以及 data/ 下每个命令的配置。\n\n" +
+		"<b>包含</b>\n登录会话（config.json、gotd-session.json）、.env，以及 data/ 下每个命令的配置和 state/ 下各插件的配置、白名单及记录（含待合并的旧配置）。\n\n" +
 		"<b>不包含</b>\neatgif 素材和测速 CLI 这类缓存，用到时会自己重新下载；也不含程序本身。\n\n" +
 		"<b>恢复</b>\n在新机器上把备份文件传上去，然后运行：\n" +
 		"<code>bash &lt;(curl -fsSL " + installURL + ") --restore 备份文件路径</code>\n" +

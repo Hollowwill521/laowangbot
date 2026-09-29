@@ -170,7 +170,7 @@ func (m *Monitor) Handle(ctx context.Context, r api.Request) api.Response {
 		}
 		if len(args) == 0 && r.Text != "" {
 			args = strings.Fields(r.Text)
-			if len(args) > 0 && (args[0] == ".monitor" || args[0] == "monitor") {
+			if len(args) > 0 && (args[0] == "monitor" || strings.HasSuffix(args[0], "monitor")) {
 				args = args[1:]
 			}
 		}
@@ -181,6 +181,11 @@ func (m *Monitor) Handle(ctx context.Context, r api.Request) api.Response {
 		var text string
 		text, err = m.command(ctx, e, args)
 		if err == nil && text != "" {
+			if strings.Contains(text, Help) {
+				if fields := strings.Fields(r.Text); len(fields) > 0 && strings.HasSuffix(fields[0], "monitor") {
+					text = strings.ReplaceAll(text, ".monitor", html.EscapeString(fields[0]))
+				}
+			}
 			err = m.reply(ctx, e, text, 100)
 		}
 	case "event":

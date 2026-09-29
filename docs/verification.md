@@ -14,7 +14,7 @@
 
 Windows PowerShell 脚本和 Dockerfile 已进入 CI；本机没有 PowerShell、Docker，因此未在本机执行。CI 矩阵覆盖目标平台的测试入口，但目标系统服务、Docker 容器启动、真实 Telegram 登录、代理、ffmpeg、外部 AI/语音服务和 `--verify` 均未在本次本地验证。远程下载式安装依赖 GitHub Release 的六平台构件和 SHA-256 清单；发布状态以 GitHub 为准。
 
-`.bf` 备份继续只收录账号配置、`.env` 和顶层 `data/*.json`；插件代码在 `plugins/`，插件私有状态在 `state/<name>/`，需要随部署目录单独备份。迁移会将旧插件归档到 `legacy/`，不会把这些目录伪装成已兼容状态。
+`.bf` 备份收录账号配置、`.env`、顶层 `data/*.json`、`state/<name>/*.json` 和 `state/pmcaptcha/legacy/*.json`；插件代码、其他嵌套状态及缓存需要随部署目录单独备份。迁移会将旧插件归档到 `legacy/`，不会把这些目录伪装成已兼容状态。
 
 ## 发布前复核
 
