@@ -14,7 +14,59 @@ import (
 	"time"
 )
 
-const Help = "qdsg add [now/秒 分 时 日 月 星期] @bot [text/reply/inline/imagechoice/xigua/math/appcf/moon] 内容 [ai provider 提示词] [steps N] [retry N] [interval 分钟] [等待毫秒] [random 最小-最大分钟] [备注]\nlist|ls; now/rm/enable/disable ID、范围、名称、all; edit ID 属性 值; reorder|reload; notify on/off/@user/me; cfbucket ID; aiconfig list|set key value|addcustom ID URL Model Key|rmcustom ID; test provider 提示词（回复消息）"
+const Help = `🤖 QDSG 自动化签到引擎
+
+支持文本、回复按钮、内联按钮、图片选项、西瓜序列、math、appcf 和 Moon，支持 AI 视觉/文本解析。
+
+➕ 1. 任务创建（add）
+.qdsg add [时间] [Bot] [模式] [内容] [高级参数...]
+.qdsg add 0 0 8 * * * @XiGuaBoss_bot inline 签到 random 5-50 西瓜
+.qdsg add 0 0 8 * * * @roc_admin_bot /checkin random 5-50 Roc
+.qdsg add 0 0 8 * * * @Moonkkbot appcf 签到 2000 random 5-50 Moon
+.qdsg add now @bot inline 签到 ai local steps 3 retry 2 interval 5 2000 random 1-50 名字
+
+示例中的 . 为命令前缀，按宿主实际配置替换。
+时间使用 now（每天此刻，不会立即执行）或六段 Cron（秒 分 时 日 月 星期）。Bot 如 @bot_name。
+模式：text、reply、inline、imagechoice、xigua、math（calc）、appcf（app_cf/app-cf）、moon；默认 text。仅提供时间和 Bot 时发送“签到”，随机延迟 0–1 分钟。
+内容是口令或按钮文字；内联多级点击用 | 分隔，例如 签到|确认；动态按钮支持 re:点击数字(\d+)。
+math 会解析“请计算：94 + 3 = ?”等加减乘除算式并回复数字，不用 AI；appcf 会请求签名 WebView 并交给已配置的 CF 外援，不使用 AI；两步应用入口可写 签到|开始验证。
+
+高级参数可任意组合：
+• ai [provider] ["提示词"]：启用 AI，例如 ai local 或 ai openai "提取数字"
+• steps N：Moon/inline AI 连环识别最大步数（1–30）
+• retry N：失败后完整重跑次数（0–100）
+• interval 分钟：重试间隔
+• 裸数字：操作等待毫秒（0–60000，默认 2000）
+• random 最大分钟 或 random 最小-最大：启动随机延迟；random off 关闭
+• aitype auto/text/image：自动判断或强制文本/图片
+• 末尾无法解析的文字：作为备注
+
+✏️ 2. 任务修改（edit）
+.qdsg edit [ID/范围/all] [属性] [值]
+属性：cron/time、bot、mode、cmd/command、wait、random、remark/note、ai/useai、provider/aiprovider、prompt/aiprompt、steps、retry/retrycount、interval/retryinterval、aitype/aitarget。
+ai on/off 开关识别；aitype 支持 auto、text、image。
+.qdsg edit 1-3,5 random off
+
+📋 3. 任务管理
+.qdsg list（或 ls）查看详情、下次执行时间和上次结果。
+.qdsg rm [选择器] 删除；enable [选择器] 恢复；disable [选择器] 暂停。
+选择器支持 ID、范围 1-3,5、@机器人、备注、all。
+.qdsg reorder 重置任务编号；reload 重新加载配置和定时器。
+
+🚀 4. 执行与测试
+.qdsg now [ID/范围/all] 立即排队执行任务。
+.qdsg test [provider] [提示词]：回复一条图片或文本消息测试 AI 解析。
+
+⚙️ 5. 系统配置
+.qdsg notify on/off/@user/me：设置签到结果通知接收人。
+.qdsg cfbucket [ID]：绑定 npoint 云端外援 ID；cfbucket off 清除。
+.qdsg aiconfig list：查看配置（密钥会遮盖）。
+.qdsg aiconfig set [key] [value]：设置 openai_key/base/model、gemini_key/base/model、provider、prompt。
+.qdsg aiconfig addcustom [ID] [URL] [Model] [Key]：添加第三方模型。
+.qdsg aiconfig rmcustom [ID]：删除第三方模型。
+
+本地 AI 需 Python 与 ddddocr、opencv-python-headless、numpy；CF 需独立外援。回复验证码使用 .qdsg test local 可检查本地 OCR。
+`
 
 var modes = map[string]string{"text": "text", "reply": "reply_button", "reply_button": "reply_button", "inline": "inline_button", "inline_button": "inline_button", "imagechoice": "image_choice", "image_choice": "image_choice", "xigua": "xigua_sequence", "xigua_sequence": "xigua_sequence", "math": "math", "calc": "math", "appcf": "app_cf", "app_cf": "app_cf", "app-cf": "app_cf", "moon": "moon"}
 
