@@ -64,7 +64,7 @@ func generate(root, tag string) (catalog, error) {
 	}
 	for _, child := range children {
 		// These implementations ship in every official binary, not as source installs.
-		if child.Name() == "monitor" || child.Name() == "qdsg" {
+		if child.Name() == "monitor" || child.Name() == "qdsg" || child.Name() == "bh" || child.Name() == "pmcaptcha" {
 			continue
 		}
 		if child.IsDir() && !strings.HasPrefix(child.Name(), ".") {

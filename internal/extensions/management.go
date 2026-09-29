@@ -21,7 +21,7 @@ func registerManagement(a *app.App, m plugin.Manager) {
 			return inv.EditText(ctx, tpmHelp(inv.Prefix))
 		}
 		if tpmMutationDisabled(inv.Args) {
-			return inv.EditText(ctx, "TPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。monitor、qdsg 已内置，请直接使用 .monitor / .qdsg；升级主程序请用 .update run。")
+			return inv.EditText(ctx, "TPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。monitor、qdsg、bh、pmcaptcha 已内置，请直接使用 .monitor / .qdsg / .bh / .pmc；升级主程序请用 .update run。")
 		}
 		binary, err := os.Executable()
 		if err != nil {

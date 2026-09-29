@@ -2,7 +2,11 @@
 
 ## 当前使用方式（0.1.8）
 
-官方程序内置 `monitor` 和 `qdsg`，直接使用 `.monitor`、`.qdsg`，不需要 `.tpm i` 或 Go 编译。原配置分别继续使用 `state/monitor`、`state/qdsg`，本地 OCR 的 Python 依赖仍按需安装。内置实现不加入外部编译注册表，因此只有内置插件时 `.update run` 下载官方二进制。
+官方程序内置 `monitor`、`qdsg` 和 `bh`，直接使用 `.monitor`、`.qdsg`、`.bh`，不需要 `.tpm i` 或 Go 编译。配置分别保存在 `state/monitor`、`state/qdsg`、`state/bh`，本地 OCR 的 Python 依赖仍按需安装。内置实现不加入外部编译注册表，因此只有内置插件时 `.update run` 下载官方二进制。
+
+`bh` 为 Emby 保号检测：支持 EmbyBoss `/myinfo`、自定义多级按钮和正则、定时聚合预警及配置导入导出。使用 `.bh` 查看完整命令；详情见 [BH 文档](../plugins/bh/README.md)。插件文件发送使用独立 `send_file` 权限，单文件不超过 512 KiB；消息元数据包含文档文件名，导入配置可核验文件类型。
+
+`pmcaptcha` 也随官方程序内置，入口 `.pmc` / `.pmcaptcha`。新安装默认关闭，`.pmc on` 启用后按配置静音归档陌生私聊，`.pmc captcha on` 开启人机验证。支持四种验证码、自动规则、白名单、记录和分组；详见 [PMCaptcha 文档](../plugins/pmcaptcha/README.md)。图片由 Go 生成，不需要 Node 或 canvas。
 
 TPM 的源码安装、更新、卸载、ZIP 导入及本地替换暂时禁用；所有别名一并禁用。保留 `.tpm ls [-v]`、`.tpm search` 和已有外部源码的 `.tpm upload`。远程源码目录不再发布这两个内置插件。
 

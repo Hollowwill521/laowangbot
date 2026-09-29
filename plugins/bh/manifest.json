@@ -1,0 +1,5 @@
+{
+ "name":"bh", "version":"1.0.0", "description":"Emby 保号管家：到期检测、定时聚合与 Bot 通知", "commands":["bh"],
+ "capabilities":["history","messages","send","edit","click","resolve","download","send_file"],
+ "protocol_version":2,"interval_seconds":1,"package":"."
+}

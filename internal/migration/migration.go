@@ -131,6 +131,19 @@ func Run(o Options) (*Report, error) {
 			return nil, e
 		}
 	}
+	if e = copyOptional(filepath.Join(stage, "legacy/assets"), stage, "baohao/baohao_config.json", "state/bh/baohao_config.json", r); e != nil {
+		return nil, e
+	}
+	for _, name := range []string{"pmcaptcha_config.json", "pmcaptcha_data.json", "config.json"} {
+		if e = copyOptional(filepath.Join(stage, "legacy/assets/pmcaptcha"), stage, name, "state/pmcaptcha/"+name, r); e != nil {
+			return nil, e
+		}
+	}
+	for _, name := range []string{"pmcaptcha_config.json", "pmcaptcha_data.json"} {
+		if e = copyOptional(filepath.Join(src, "pmcaptcha_userdata"), stage, name, "state/pmcaptcha/legacy/"+name, r); e != nil {
+			return nil, e
+		}
+	}
 	if o.Convert != nil && (kind == "mibox" || kind == "telebox") {
 		var log bytes.Buffer
 		if e = o.Convert(filepath.Join(stage, "legacy"), filepath.Join(stage, "data"), &log); e != nil {

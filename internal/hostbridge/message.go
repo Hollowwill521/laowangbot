@@ -20,6 +20,11 @@ func serialize(m *tg.Message) pluginapi.Message {
 	if doc, ok := m.Media.(*tg.MessageMediaDocument); ok {
 		if d, ok := doc.Document.(*tg.Document); ok {
 			r.MimeType = d.MimeType
+			for _, attr := range d.Attributes {
+				if filename, ok := attr.(*tg.DocumentAttributeFilename); ok {
+					r.Filename = filename.FileName
+				}
+			}
 		}
 	}
 	if f, ok := m.GetFwdFrom(); ok {

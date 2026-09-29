@@ -89,7 +89,7 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 		a.OnClose(r.close)
 		for _, n := range m.Commands {
 			a.Registry.Register(&command.Command{Name: n, Description: "插件 " + m.Name, Handle: func(ctx context.Context, inv *command.Invocation) error {
-				event := messageEvent(inv.Message)
+				event := messageEvent(inv.Message, inv.Client)
 				if inv.Client != nil {
 					event["self_id"] = strconv.FormatInt(inv.Client.SelfID(), 10)
 				}
@@ -120,7 +120,7 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 				if !msg.Out && !slices.Contains(m.Events, "message") {
 					return false
 				}
-				payload := messageEvent(msg)
+				payload := messageEvent(msg, c)
 				payload["self_id"] = strconv.FormatInt(c.SelfID(), 10)
 				raw, _ := json.Marshal(payload)
 				select {
@@ -293,9 +293,16 @@ func (r *runtime) run(ctx context.Context, client *bot.Client) {
 		}
 	}
 }
-func messageEvent(m *bot.Message) map[string]any {
+func messageEvent(m *bot.Message, clients ...*bot.Client) map[string]any {
+	channelDM := false
+	if m.Out && m.Raw != nil && m.Raw.SavedPeerID != nil && len(clients) > 0 && clients[0] != nil {
+		if id, ok := m.Channel(); ok {
+			ch, found := clients[0].Peers().Channel(id)
+			channelDM = found && ch.Monoforum
+		}
+	}
 	_, user := m.Sender.(*tg.PeerUser)
-	return map[string]any{"type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
+	return map[string]any{"chat_type": string(m.ChatType), "channel_dm": channelDM, "type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
 }
 func send(ctx context.Context, c *bot.Client, r pluginapi.Response) error {
 	for _, m := range r.Messages {

@@ -68,6 +68,8 @@ type acnUser struct {
 	TextIndex         int    `json:"text_index"`
 	ShowClockEmoji    bool   `json:"show_clock_emoji"`
 	ShowTime          *bool  `json:"show_time"`
+	ShowWeekday       bool   `json:"show_weekday"`
+	WeekdayFormat     string `json:"weekday_format"`
 	// HourFormat 是 "12" 或 "24"，来自 MiBox v2 的 acn time 12|24。
 	HourFormat     string `json:"hour_format,omitempty"`
 	ShowTimezone   bool   `json:"show_timezone"`
@@ -163,10 +165,10 @@ type acnService struct {
 
 // acnDefaultOrder 是没设过顺序时的顺序，与 MiBox 新建用户时写入的一致。
 // 顺序里没列出的组件按 acnComponents 的次序接在后面，所以实际是
-// name,time,text,weather,emoji,timezone。
+// 星期默认关闭；开启后在 time 前自动补入 weekday。
 const acnDefaultOrder = "name,time"
 
-var acnComponents = []string{"name", "text", "time", "weather", "emoji", "timezone"}
+var acnComponents = []string{"name", "weekday", "text", "time", "weather", "emoji", "timezone"}
 
 var acnStyles = []string{"normal", "italic", "double", "sans", "mono", "outline"}
 
@@ -181,7 +183,7 @@ func acnDefaults() acnState {
 func newAcnUser(userID string) *acnUser {
 	showTime := true
 	return &acnUser{UserID: acnID(userID), Timezone: "Asia/Shanghai", Mode: "time", ShowTime: &showTime,
-		HourFormat: "24", TimezoneFormat: "GMT", DisplayOrder: acnDefaultOrder, TextStyle: "normal"}
+		HourFormat: "24", WeekdayFormat: "zh", TimezoneFormat: "GMT", DisplayOrder: acnDefaultOrder, TextStyle: "normal"}
 }
 
 func (u *acnUser) showTime() bool { return u.ShowTime == nil || *u.ShowTime }
@@ -231,6 +233,10 @@ func normalizeUser(id string, user *acnUser) {
 	}
 	if user.OriginalFirstName == "" {
 		user.Enabled = false
+	}
+	user.WeekdayFormat = weekdayFormat(user.WeekdayFormat)
+	if user.WeekdayFormat == "" {
+		user.WeekdayFormat = "zh"
 	}
 	user.DisplayComponents = cleanComponents(user.DisplayComponents)
 }
@@ -302,7 +308,7 @@ func applyTextStyle(text, style string) string {
 //   - 时间在任何模式下都显示，只要没关掉时间显示；
 //   - 文案在 text/both 模式下显示；
 //   - acn show 选定了组件时，时间和文案只在选中时显示；
-//   - 时钟表情、时区、天气各由自己的开关决定；
+//   - 星期、时钟表情、时区、天气各由自己的开关决定；
 //   - 顺序按 display_order，没列出的组件按 acnComponents 的次序接在后面，空的跳过。
 //
 // weather 是已经取好的天气文字。
@@ -313,6 +319,9 @@ func composeName(user *acnUser, texts []string, weather string, now time.Time) s
 	}
 	includes := func(component string) bool { return len(selected) == 0 || selected[component] }
 	parts := map[string]string{"name": user.OriginalFirstName, "weather": weather}
+	if user.ShowWeekday {
+		parts["weekday"] = formatWeekday(user.Timezone, user.WeekdayFormat, now)
+	}
 	if (user.Mode == "text" || user.Mode == "both" || selected["text"]) && includes("text") && len(texts) > 0 {
 		index := user.TextIndex % len(texts)
 		if index < 0 {
@@ -336,7 +345,18 @@ func composeName(user *acnUser, texts []string, weather string, now time.Time) s
 	}
 	var pieces []string
 	seen := map[string]bool{}
-	for _, key := range append(strings.Split(order, ","), acnComponents...) {
+	requested := strings.Split(order, ",")
+	for index := range requested {
+		requested[index] = strings.TrimSpace(requested[index])
+	}
+	if user.ShowWeekday && !slices.Contains(requested, "weekday") {
+		index := slices.Index(requested, "time")
+		if index < 0 {
+			index = len(requested)
+		}
+		requested = slices.Insert(requested, index, "weekday")
+	}
+	for _, key := range append(requested, acnComponents...) {
 		key = strings.TrimSpace(key)
 		if key == "" || seen[key] {
 			continue
@@ -381,12 +401,13 @@ func withComponent(order, component string, enabled bool) string {
 	return strings.Join(parts, ",")
 }
 
-// applyOrder 设置顺序，并让各开关与顺序一致：列出的时间、时钟表情、时区打开，
+// applyOrder 设置顺序，并让各开关与顺序一致：列出的时间、星期、时钟表情、时区打开，
 // 没列出的关掉；列出了天气就打开天气。与 MiBox 的 acn order 相同。
 func applyOrder(user *acnUser, components []string) {
 	user.DisplayOrder = strings.Join(components, ",")
 	showTime := slices.Contains(components, "time")
 	user.ShowTime = &showTime
+	user.ShowWeekday = slices.Contains(components, "weekday")
 	user.ShowClockEmoji = slices.Contains(components, "emoji")
 	user.ShowTimezone = slices.Contains(components, "timezone")
 	if slices.Contains(components, "weather") {
@@ -411,6 +432,9 @@ func toggleShown(user *acnUser, component string, on bool) {
 		current = []string{}
 	}
 	user.DisplayComponents = current
+	if component == "weekday" {
+		user.ShowWeekday = on
+	}
 	if component == "weather" {
 		user.WeatherEnabled = on
 	}
@@ -585,9 +609,9 @@ func acnHelp(prefix string) string {
 		"acn tz Asia/Shanghai</code> 设置时区\n• <code>" + p + "acn tz on</code> / <code>off</code> 是否显示时区\n• <code>" + p +
 		"acn tz format GMT|UTC|simp|offset|custom:文字</code>\n\n<b>外观</b>\n• <code>" + p + "acn emoji on</code> / <code>off</code> 时钟表情\n• <code>" + p +
 		"acn time on</code> / <code>off</code> 时间显示\n• <code>" + p + "acn time 12</code> / <code>24</code> 12 或 24 小时制\n• <code>" + p +
-		"acn style normal|italic|double|sans|mono|outline</code>\n• <code>" + p +
-		"acn order name,text,time,weather,emoji,timezone</code>（同时开关其中的时间、表情、时区）\n• <code>" + p +
-		"acn show time|text|weather on</code> / <code>off</code> 只显示选中的组件，<code>" + p + "acn show reset</code> 恢复\n\n<b>文案</b>\n• <code>" + p +
+		"acn weekday on</code> / <code>off</code> 星期显示（默认关闭，按设置时区）\n• <code>" + p + "acn weekday zh|en|both</code> 中文/英文/中英（默认 zh）；也支持 weekday format zh|en|both\n• <code>" + p + "acn style normal|italic|double|sans|mono|outline</code>\n• <code>" + p +
+		"acn order name,weekday,text,time,weather,emoji,timezone</code>（同时开关其中的时间、星期、表情、时区）\n• <code>" + p +
+		"acn show time|weekday|text|weather on</code> / <code>off</code> 只显示选中的组件，<code>" + p + "acn show reset</code> 恢复\n\n<b>文案</b>\n• <code>" + p +
 		"acn text add 摸鱼中</code>（支持多行）\n• <code>" + p +
 		"acn text list</code> / <code>del 序号</code> / <code>clear</code>\n• <code>" + p + "acn text on</code> / <code>off</code>\n\n<b>天气</b>\n• <code>" + p +
 		"acn weather set 北京</code> 设置地点并开启\n• <code>" + p + "acn weather on</code> / <code>off</code>\n天气缓存 30 分钟。"
@@ -618,7 +642,7 @@ func Register(a *app.App) {
 
 	handle := func(ctx context.Context, inv *command.Invocation) error { return acnHandle(ctx, inv, service) }
 	a.Registry.Register(
-		&command.Command{Name: "acn", Description: "管理动态昵称", Usage: "save|on|off|mode|tz|text|show|time|weather|update|reset|status", Help: acnHelp, Handle: handle},
+		&command.Command{Name: "acn", Description: "管理动态昵称", Usage: "save|on|off|mode|tz|text|show|time|weekday|weather|update|reset|status", Help: acnHelp, Handle: handle},
 		&command.Command{Name: "autochangename", Description: "acn 的全称", Hidden: true, Help: acnHelp, Handle: handle},
 	)
 
@@ -910,7 +934,7 @@ func (c *acnCall) style() error {
 }
 
 // order 查看或设置昵称里各部分的顺序；不分大小写，重复的只留第一次出现的。
-// 设置顺序的同时按顺序开关时间、时钟表情和时区，列出天气就打开天气。
+// 设置顺序的同时按顺序开关时间、星期、时钟表情和时区，列出天气就打开天气。
 func (c *acnCall) order() error {
 	values := strings.FieldsFunc(strings.ToLower(c.inv.Rest(1)), func(r rune) bool { return r == ',' || r == ' ' })
 	if len(values) == 0 {
@@ -933,29 +957,35 @@ func (c *acnCall) order() error {
 	return c.inv.Edit(c.ctx, "✅ 显示顺序: "+command.Code(strings.Join(unique, ",")))
 }
 
-// show 管理 acn show 选定的组件：只管时间、文案和天气，表情和时区有各自的命令。
+// show 管理 acn show 选定的组件：时间、星期、文案和天气，表情和时区有各自的命令。
 func (c *acnCall) show() error {
 	action := strings.ToLower(c.inv.Arg(1))
 	target := strings.ToLower(c.inv.Arg(2))
 	p := command.Escape(c.inv.Prefix)
 	if action == "" || action == "help" || action == "h" {
-		current := c.user.DisplayComponents
+		current := slices.Clone(c.user.DisplayComponents)
 		if current == nil {
-			current = showDefaults[c.user.Mode]
+			current = slices.Clone(showDefaults[c.user.Mode])
+		}
+		if c.user.ShowWeekday && !slices.Contains(current, "weekday") {
+			current = append(current, "weekday")
 		}
 		return c.inv.Edit(c.ctx, "🎛️ <b>显示组件管理</b>\n\n当前组件: "+command.Code(strings.Join(current, ", "))+
 			"\n\n• <code>"+p+"acn show time on/off</code>\n• <code>"+p+"acn show text on/off</code>\n• <code>"+p+
-			"acn show weather on/off</code>\n• <code>"+p+"acn show reset</code>")
+			"acn show weekday on/off</code>\n• <code>"+p+"acn show weather on/off</code>\n• <code>"+p+"acn show reset</code>")
 	}
 	if action == "reset" {
-		updated, err := c.change(func(user *acnUser) { user.DisplayComponents = slices.Clone(showDefaults[user.Mode]) })
+		updated, err := c.change(func(user *acnUser) {
+			user.DisplayComponents = slices.Clone(showDefaults[user.Mode])
+			user.ShowWeekday = false
+		})
 		if err != nil {
 			return err
 		}
 		return c.inv.Edit(c.ctx, "✅ <b>已重置为默认值</b>\n\n当前模式默认组件: "+command.Code(strings.Join(updated.DisplayComponents, ", ")))
 	}
-	if action != "time" && action != "text" && action != "weather" {
-		return c.inv.Edit(c.ctx, "❌ <b>acn show 仅支持管理 time/text/weather</b>")
+	if action != "time" && action != "weekday" && action != "text" && action != "weather" {
+		return c.inv.Edit(c.ctx, "❌ <b>acn show 仅支持管理 time/weekday/text/weather</b>")
 	}
 	if target != "on" && target != "off" {
 		return c.inv.Edit(c.ctx, "❌ <b>请指定 on 或 off</b>\n使用: <code>"+p+"acn show "+action+" on/off</code>")
@@ -985,6 +1015,7 @@ func (c *acnCall) config() error {
 		{"用户", string(user.UserID)}, {"自动更新", kit.OnOffText(user.Enabled)}, {"原始姓名", user.OriginalFirstName},
 		{"原始姓氏", kit.OrDefault(user.OriginalLastName, "(空)")}, {"模式", user.Mode}, {"时区", user.Timezone},
 		{"时间显示", kit.OnOffText(user.showTime())}, {"时间制式", hourFormatOf(user) + " 小时制"},
+		{"星期显示", kit.OnOffText(user.ShowWeekday)}, {"星期格式", kit.OrDefault(user.WeekdayFormat, "zh")},
 		{"时钟表情", kit.OnOffText(user.ShowClockEmoji)},
 		{"时区显示", kit.OnOffText(user.ShowTimezone)}, {"时区格式", kit.OrDefault(user.TimezoneFormat, "GMT")},
 		{"文字样式", kit.OrDefault(user.TextStyle, "normal")}, {"组件顺序", kit.OrDefault(user.DisplayOrder, acnDefaultOrder)},
@@ -1055,6 +1086,8 @@ func acnHandle(ctx context.Context, inv *command.Invocation, service *acnService
 		return call.text()
 	case "emoji", "time":
 		return call.flag()
+	case "weekday":
+		return call.weekday()
 	case "style":
 		return call.style()
 	case "order":
@@ -1211,7 +1244,7 @@ func (c *acnCall) weather() error {
 	return inv.EditText(ctx, "✅ 天气配置已更新")
 }
 
-// cleanNickname 去掉上一次运行追加的钟面表情和 HH:MM，
+// cleanNickname 去掉上一次运行追加的星期、钟面表情和 HH:MM，
 // 免得重新保存时把过去的时间固化进原始昵称里。
 func cleanNickname(name string) string {
 	runes := []rune(kit.TruncateRunes(name, 128))
@@ -1222,7 +1255,7 @@ func cleanNickname(name string) string {
 		}
 		b.WriteRune(r)
 	}
-	cleaned := clockTimePattern.ReplaceAllString(b.String(), "")
+	cleaned := clockTimePattern.ReplaceAllString(stripWeekday(b.String()), "")
 	return strings.TrimSpace(strings.Join(strings.Fields(cleaned), " "))
 }
 

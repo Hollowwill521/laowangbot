@@ -13,9 +13,15 @@ import (
 )
 
 func dispatch(ctx context.Context, b *bot.Client, c pluginapi.Call) (r pluginapi.Result, err error) {
+	if c.Method == "send_file" && (c.Filename == "" || strings.ContainsAny(c.Filename, "/\\\x00") || len(c.Bytes) == 0 || len(c.Bytes) > 512<<10) {
+		return r, errors.New("send_file requires a filename and 1..524288 bytes")
+	}
 	if c.Method == "self" {
 		r.Entity = entity(b, &tg.InputPeerSelf{})
 		return
+	}
+	if c.Method == "folders" {
+		return folders(ctx, b)
 	}
 	if c.Target == "" {
 		return r, errors.New("target required")
@@ -25,16 +31,25 @@ func dispatch(ctx context.Context, b *bot.Client, c pluginapi.Call) (r pluginapi
 		return r, err
 	}
 	switch c.Method {
+	case "chat_action":
+		err = chatAction(ctx, b, p, c.Action, c.FolderID)
+	case "user_info":
+		return userInfo(ctx, b, p)
+	case "send_photo":
+		return sendPhoto(ctx, b, p, c)
 	case "resolve":
 		r.Entity = entity(b, p)
 	case "identity":
 		r.Identity, err = identity(ctx, b, p, c.User)
 	case "history":
+		if c.OffsetID < 0 {
+			return r, errors.New("offset_id cannot be negative")
+		}
 		if c.Limit < 1 || c.Limit > 100 {
 			return r, errors.New("limit must be 1..100")
 		}
 		var result tg.MessagesMessagesClass
-		result, err = b.API().MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: p, Limit: c.Limit})
+		result, err = b.API().MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: p, Limit: c.Limit, OffsetID: c.OffsetID})
 		if err == nil {
 			ms, _ := b.Unpack(result)
 			for _, m := range ms {
@@ -77,6 +92,11 @@ func dispatch(ctx context.Context, b *bot.Client, c pluginapi.Call) (r pluginapi
 		} else {
 			r.MessageID, err = b.SendText(ctx, p, c.Text, bot.SendOptions{ReplyTo: c.ReplyTo})
 		}
+	case "send_file":
+		if c.MimeType == "" {
+			c.MimeType = "application/octet-stream"
+		}
+		err = b.SendDocument(ctx, p, c.Filename, c.MimeType, c.Bytes, bot.Escape(c.Text), c.ReplyTo)
 	case "edit":
 		if c.MessageID <= 0 {
 			return r, errors.New("message_id required")

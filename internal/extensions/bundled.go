@@ -9,7 +9,9 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/compiled"
 	"github.com/OrionG-hub/laowangbot/internal/plugin"
 	"github.com/OrionG-hub/laowangbot/pkg/pluginapi"
+	"github.com/OrionG-hub/laowangbot/plugins/bh"
 	"github.com/OrionG-hub/laowangbot/plugins/monitor"
+	"github.com/OrionG-hub/laowangbot/plugins/pmcaptcha"
 	"github.com/OrionG-hub/laowangbot/plugins/qdsg"
 )
 
@@ -21,13 +23,20 @@ func registerBundledHelp(a *app.App, external []compiled.Entry) {
 	for _, entry := range external {
 		custom[entry.Manifest.Name] = true
 	}
-	for name, help := range map[string]string{"monitor": monitor.Help, "qdsg": command.Escape(qdsg.Help)} {
+	for name, help := range map[string]string{"monitor": monitor.Help, "qdsg": command.Escape(qdsg.Help), "bh": command.Escape(bh.Help)} {
 		if custom[name] {
 			continue
 		}
 		if c, ok := a.Registry.Lookup(name); ok {
 			c.Help = func(prefix string) string {
 				return strings.ReplaceAll(help, "."+name, command.Escape(prefix+name))
+			}
+		}
+	}
+	if !custom["pmcaptcha"] {
+		for _, name := range []string{"pmc", "pmcaptcha"} {
+			if c, ok := a.Registry.Lookup(name); ok {
+				c.Help = func(prefix string) string { return command.Escape(pmcaptcha.HelpText(prefix, "")) }
 			}
 		}
 	}
@@ -48,6 +57,8 @@ func bundledEntries(external []compiled.Entry) []compiled.Entry {
 	}{
 		{monitor.ManifestJSON(), monitor.Open},
 		{qdsg.ManifestJSON(), qdsg.Open},
+		{bh.ManifestJSON(), bh.Open},
+		{pmcaptcha.ManifestJSON(), pmcaptcha.Open},
 	} {
 		var manifest plugin.Manifest
 		if err := json.Unmarshal([]byte(built.manifest), &manifest); err != nil {

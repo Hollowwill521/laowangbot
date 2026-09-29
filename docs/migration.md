@@ -70,7 +70,9 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 ./laowangbot --plugin list --root /path/to/new-laowangbot
 ```
 
-官方程序已内置 `monitor` 和 `qdsg`，迁移配置后直接使用相应命令。TPM 源码安装、替换、更新及卸载暂时禁用，`.tpm list` 可查看内置及已有外部插件。
+官方程序已内置 `monitor`、`qdsg` 和 `bh`，迁移配置后直接使用相应命令。旧 `assets/baohao/baohao_config.json` 自动复制到 `state/bh/baohao_config.json`，保留原任务和通知配置；也可通过 `.bh tpm i` 回复配置文件导入。TPM 源码安装、替换、更新及卸载暂时禁用，`.tpm list` 可查看内置及已有外部插件。
+
+PMCaptcha 的 `assets/pmcaptcha/pmcaptcha_config.json`、`pmcaptcha_data.json` 和面板旧 `config.json` 迁至 `state/pmcaptcha`；根目录 `pmcaptcha_userdata` 的旧配置、用户数据迁至 `state/pmcaptcha/legacy`。插件首次加载合并这些来源，使用标记避免已删除的旧记录在重启后重新出现。新安装默认关闭；迁移已有启停配置按原值保留。
 
 ## 兼容依据与回退
 
@@ -78,4 +80,4 @@ bash scripts/install.sh --wizard --root "$HOME/laowangbot-data"
 
 回退时停止新实例，再启动保留的旧部署。新实例运行后产生的数据不会自动反向同步；必要时先备份。不要让旧、新实例同时使用同一 Telegram 会话。
 
-向导固定选项统一输入数字；多个服务匹配时输入序号；未匹配时服务名输入可回车使用建议值。标题/输入提示为青色，选项/成功为绿色，注意事项为黄色，错误为红色。非终端或设置 `NO_COLOR` 时不输出颜色。目录和服务名仍需输入文本。
+向导固定选项统一输入数字；多个服务匹配时支持空格或逗号多选（`1 2 3`、`1,2,3`）或 `all` 全选，回车/`0` 取消。迁移前逐项停止并禁用所选服务，失败时按各自原运行、自启动状态恢复；未选服务仍须已停止且禁用。未匹配时服务名输入可回车使用建议值。标题/输入提示为青色，选项/成功为绿色，注意事项为黄色，错误为红色。非终端或设置 `NO_COLOR` 时不输出颜色。目录和服务名仍需输入文本。

@@ -40,6 +40,7 @@ func (u UserInfo) DisplayName() string {
 
 // ChannelInfo 是缓存为频道或超级群保存的信息。
 type ChannelInfo struct {
+	Monoforum   bool
 	ID          int64
 	Hash        int64
 	HasHash     bool
@@ -188,6 +189,7 @@ func (c *PeerCache) rememberChannel(channel *tg.Channel) {
 		info.PhotoID, info.PhotoDC = photo.PhotoID, photo.DCID
 	}
 	info.Broadcast, info.Megagroup, info.Noforwards = channel.Broadcast, channel.Megagroup, channel.Noforwards
+	info.Monoforum = channel.Monoforum
 	info.Left = channel.Left
 	if !channel.Min {
 		info.Creator = channel.Creator

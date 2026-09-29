@@ -120,4 +120,8 @@ go vet ./...
 
 自 0.1.8 起，官方程式內建 `monitor`、`qdsg`，直接使用 `.monitor`、`.qdsg`，無需本機 Go 編譯。設定仍保留於 `state/monitor`、`state/qdsg`；本機 OCR 仍需選用的 Python 相依套件。
 
+另內建 `bh` 保號管家，支援 EmbyBoss／自訂檢測、排程預警、Bot 通知與設定匯入匯出。使用 `.bh` 查看說明，設定儲存於 `state/bh`。
+
+`pmcaptcha` 私聊驗證亦已內建，新安裝預設關閉。使用 `.pmc` 查看說明，`.pmc on` 啟用規則，`.pmc captcha on` 開啟驗證，設定與記錄儲存於 `state/pmcaptcha`。
+
 TPM 原始碼安裝、更新、移除、匯入和替換暫時停用。`.tpm ls -v` 查看外掛，`.tpm s 關鍵詞` 搜尋，`.tpm ul 名稱` 匯出既有外部原始碼。內建外掛隨 `.update run` 更新主程式；既有自訂原始碼外掛保留原實作與原始碼更新方式。詳見[說明](docs/plugins.md)。

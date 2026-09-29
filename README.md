@@ -123,4 +123,8 @@ bash scripts/build.sh
 
 从 0.1.8 起，`monitor`、`qdsg` 随官方程序内置，直接使用 `.monitor`、`.qdsg`；安装和升级无需本地 Go 编译。配置继续保存在 `state/monitor`、`state/qdsg`。本地 OCR 仍按需使用 Python 依赖。
 
+`bh` 保号管家也随程序内置：使用 `.bh` 查看 EmbyBoss/自定义保号检测、定时预警、通知和配置导入导出，配置保存在 `state/bh`。
+
+`pmcaptcha` 私聊验证也已内置，使用 `.pmc` 查看帮助。新安装默认关闭；`.pmc on` 启用规则，`.pmc captcha on` 开启验证码，配置与用户记录保存在 `state/pmcaptcha`。
+
 TPM 源码安装、更新、卸载、导入和替换暂时禁用。`.tpm ls -v` 查看内置及外部插件，`.tpm s 关键词` 搜索，`.tpm ul 名称` 导出已有外部源码。内置插件通过 `.update run` 随主程序更新；已有手动源码插件仍保留原版本及源码更新路径。见[完整说明](docs/plugins.md)。

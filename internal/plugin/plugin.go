@@ -614,4 +614,4 @@ func copyPlugin(source, stage string, v Manifest) error {
 	})
 }
 
-var hostCapabilities = map[string]bool{"self": true, "resolve": true, "identity": true, "history": true, "messages": true, "send": true, "edit": true, "delete": true, "forward": true, "download": true, "click": true, "webview": true, "webview_data": true}
+var hostCapabilities = map[string]bool{"self": true, "resolve": true, "identity": true, "history": true, "messages": true, "send": true, "send_file": true, "send_photo": true, "chat_action": true, "folders": true, "user_info": true, "edit": true, "delete": true, "forward": true, "download": true, "click": true, "webview": true, "webview_data": true}

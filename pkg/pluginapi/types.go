@@ -10,6 +10,8 @@ const Version = 1
 
 // IDs use Telegram's marked decimal representation, keeping 64-bit precision.
 type Entity struct {
+	Premium   bool   `json:"premium"`
+	Contact   bool   `json:"contact"`
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Username  string `json:"username,omitempty"`
@@ -39,11 +41,14 @@ type Message struct {
 	URLs             []string `json:"urls,omitempty"`
 	HasMedia         bool     `json:"has_media"`
 	MimeType         string   `json:"mime_type,omitempty"`
+	Filename         string   `json:"filename,omitempty"`
 	ForwardID        string   `json:"forward_id,omitempty"`
 	ForwardMessageID int      `json:"forward_message_id,omitempty"`
 	ForwardDate      int      `json:"forward_date,omitempty"`
 }
 type Event struct {
+	ChatType     string `json:"chat_type"`
+	ChannelDM    bool   `json:"channel_dm"`
 	SenderIsUser bool   `json:"sender_is_user"`
 	SenderPeerID string `json:"sender_peer_id"`
 	Type         string `json:"type"`
@@ -76,6 +81,12 @@ type Response struct {
 	Messages []Outgoing `json:"messages,omitempty"`
 }
 type Call struct {
+	OffsetID   int    `json:"offset_id,omitempty"`
+	Action     string `json:"action,omitempty"`
+	FolderID   int    `json:"folder_id,omitempty"`
+	Filename   string `json:"filename,omitempty"`
+	Bytes      []byte `json:"bytes,omitempty"`
+	MimeType   string `json:"mime_type,omitempty"`
 	Method     string `json:"method"`
 	Target     string `json:"target,omitempty"`
 	User       string `json:"user,omitempty"`
@@ -92,16 +103,31 @@ type Call struct {
 	ButtonText string `json:"button_text,omitempty"`
 	Simple     bool   `json:"simple,omitempty"`
 }
+type Folder struct {
+	ID              int    `json:"id"`
+	Title           string `json:"title"`
+	Contacts        bool   `json:"contacts"`
+	NonContacts     bool   `json:"non_contacts"`
+	Groups          bool   `json:"groups"`
+	Broadcasts      bool   `json:"broadcasts"`
+	Bots            bool   `json:"bots"`
+	ExcludeMuted    bool   `json:"exclude_muted"`
+	ExcludeArchived bool   `json:"exclude_archived"`
+	IncludeCount    int    `json:"include_count"`
+	ExcludeCount    int    `json:"exclude_count"`
+}
 type Result struct {
-	Entity    *Entity   `json:"entity,omitempty"`
-	Messages  []Message `json:"messages,omitempty"`
-	MessageID int       `json:"message_id,omitempty"`
-	Identity  string    `json:"identity,omitempty"`
-	Bytes     []byte    `json:"bytes,omitempty"`
-	MimeType  string    `json:"mime_type,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Text      string    `json:"text,omitempty"`
-	Error     string    `json:"error,omitempty"`
+	Folders     []Folder  `json:"folders,omitempty"`
+	CommonChats int       `json:"common_chats"`
+	Entity      *Entity   `json:"entity,omitempty"`
+	Messages    []Message `json:"messages,omitempty"`
+	MessageID   int       `json:"message_id,omitempty"`
+	Identity    string    `json:"identity,omitempty"`
+	Bytes       []byte    `json:"bytes,omitempty"`
+	MimeType    string    `json:"mime_type,omitempty"`
+	URL         string    `json:"url,omitempty"`
+	Text        string    `json:"text,omitempty"`
+	Error       string    `json:"error,omitempty"`
 }
 type Host interface {
 	Call(context.Context, Call) (Result, error)

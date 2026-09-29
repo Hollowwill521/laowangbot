@@ -14,7 +14,8 @@ warn() { ui "$C_WARN" "$*"; }
 error() { ui "$C_ERROR" "$*"; }
 die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
-BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_SERVICE=; SOURCE_STOPPED=0; SOURCE_ALREADY_STOPPED=0; SOURCE_ENABLE_STATE=; SOURCE_DISABLED=0
+BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_ALREADY_STOPPED=0
+SOURCE_SERVICES=(); SOURCE_ENABLE_STATES=(); SOURCE_ACTIVE_STATES=(); SOURCE_TOUCHED=(); SOURCE_DISABLE_ATTEMPTED=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --root|--repo|--version|--binary|--migrate|--from|--restore)
@@ -83,7 +84,8 @@ source_matches() {
   [ -d "$working" ] && [ "$(cd -- "$working" && pwd -P)" = "$MIGRATE" ]
 }
 select_source_service() {
-  local loaded installed unit rest canonical found candidate choice index
+  local loaded installed unit rest canonical found candidate choice index selected token
+  local choices=()
   local matches=()
   info '正在自动识别旧 systemd 服务…'
   loaded=$(systemctl list-units --type=service --all --plain --no-legend --no-pager 2>/dev/null) || die '无法读取 systemd 服务列表，未停止任何服务'
@@ -109,28 +111,46 @@ $installed"
       warn "未找到工作目录为 $MIGRATE 的服务，请输入旧服务名。"
       case "$FROM" in mibot-lite) candidate=mibot-lite.service;; mibox) candidate=mibot.service;; telebox) candidate=telebox.service;; *) candidate=;; esac
       ask "旧 systemd 服务名称${candidate:+ [$candidate]}："
-      SOURCE_SERVICE=${ANSWER:-$candidate}
+      SOURCE_SERVICES=("${ANSWER:-$candidate}")
       ;;
-    1) SOURCE_SERVICE=${matches[0]}; success "自动识别到旧服务：$SOURCE_SERVICE";;
+    1) SOURCE_SERVICES=("${matches[0]}"); success "自动识别到旧服务：${SOURCE_SERVICES[0]}";;
     *)
       info '找到多个匹配服务，请选择：'
       index=1
       for candidate in "${matches[@]}"; do ui "$C_OK" "$index) $candidate"; index=$((index+1)); done
       warn '0) 取消'
-      ask '请选择服务序号（回车取消）：'
-      choice=${ANSWER:-0}; SOURCE_SERVICE=
-      index=1
-      for candidate in "${matches[@]}"; do
-        if [ "$choice" = "$index" ]; then SOURCE_SERVICE=$candidate; break; fi
-        index=$((index+1))
-      done
-      [ -n "$SOURCE_SERVICE" ] || die '未选择有效服务，已取消'
+      ask '请选择服务序号（空格或逗号分隔，all 全选，回车取消）：'
+      choice=$ANSWER
+      if [ "$choice" = all ]; then
+        SOURCE_SERVICES=("${matches[@]}")
+      else
+        # Validate the entire input before selecting or mutating any service.
+        [[ "$choice" =~ ^[[:space:]]*[1-9][0-9]*([[:space:]]+[1-9][0-9]*|[[:space:]]*,[[:space:]]*[1-9][0-9]*)*[[:space:]]*$ ]] || die '未选择有效服务，已取消'
+        IFS=$' \t' read -r -a choices <<< "${choice//,/ }"
+        for token in "${choices[@]}"; do
+          found=0; index=1
+          for candidate in "${matches[@]}"; do
+            if [ "$token" = "$index" ]; then
+              found=1; selected=0
+              for unit in "${SOURCE_SERVICES[@]+"${SOURCE_SERVICES[@]}"}"; do [ "$unit" != "$candidate" ] || selected=1; done
+              [ "$selected" = 1 ] || SOURCE_SERVICES+=("$candidate")
+              break
+            fi
+            index=$((index+1))
+          done
+          [ "$found" = 1 ] || die '未选择有效服务，已取消'
+        done
+      fi
       ;;
   esac
-  valid_source_unit "$SOURCE_SERVICE" || die '服务名称无效，或不能将新服务作为旧服务'
-  source_matches "$SOURCE_SERVICE" || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
+  for unit in "${SOURCE_SERVICES[@]}"; do
+    valid_source_unit "$unit" || die '服务名称无效，或不能将新服务作为旧服务'
+    source_matches "$unit" || die '旧服务的 WorkingDirectory 与所选部署目录不一致，未停止服务'
+  done
   for candidate in "${matches[@]+"${matches[@]}"}"; do
-    [ "$candidate" != "$SOURCE_SERVICE" ] || continue
+    selected=0
+    for unit in "${SOURCE_SERVICES[@]}"; do [ "$unit" != "$candidate" ] || selected=1; done
+    [ "$selected" = 0 ] || continue
     local other_state other_enabled
     other_state=$(systemctl show "$candidate" -p ActiveState --value) || die '无法核验其他匹配服务'
     other_enabled=$(systemctl show "$candidate" -p UnitFileState --value) || die '无法核验其他匹配服务自启动'
@@ -166,22 +186,35 @@ cleanup() {
   rc=$?; SAFE_TO_RESUME=1
   if [ "$SUCCESS" = 0 ]; then
     if [ "$CHANGED" = 1 ]; then
-      if [ "$TARGET_START_ATTEMPTED" = 1 ]; then service_stop >/dev/null 2>&1 || SAFE_TO_RESUME=0; fi
+      if [ "$TARGET_START_ATTEMPTED" = 1 ]; then
+        service_stop >/dev/null 2>&1 || SAFE_TO_RESUME=0
+        if [ "$OS" = linux ] && [ "$SAFE_TO_RESUME" = 1 ]; then
+          target_state=$(systemctl show laowangbot -p ActiveState --value) || SAFE_TO_RESUME=0
+          case "$target_state" in inactive|failed) ;; *) SAFE_TO_RESUME=0;; esac
+        fi
+      fi
       if [ "$HAD_BINARY" = 1 ]; then cp "$WORK/previous" "$ROOT/laowangbot"; else rm -f "$ROOT/laowangbot"; fi
     fi
     if [ "$UNIT_CHANGED" = 1 ]; then
       if [ "$HAD_UNIT" = 1 ]; then cp "$WORK/unit" "$UNIT"; else rm -f "$UNIT"; fi
     fi
-    if [ "$SOURCE_DISABLED" = 1 ] && [ "$SAFE_TO_RESUME" = 1 ]; then
-      case "$SOURCE_ENABLE_STATE" in
-        enabled) systemctl enable "$SOURCE_SERVICE" || { error "旧服务自启动恢复失败：$SOURCE_SERVICE"; SAFE_TO_RESUME=0; };;
-        enabled-runtime) systemctl enable --runtime "$SOURCE_SERVICE" || { error "旧服务自启动恢复失败：$SOURCE_SERVICE"; SAFE_TO_RESUME=0; };;
-      esac
-    fi
-    if [ "$SOURCE_STOPPED" = 1 ]; then
-      if [ "$SAFE_TO_RESUME" = 1 ]; then systemctl start "$SOURCE_SERVICE" || error "旧服务恢复失败：$SOURCE_SERVICE"
-      else error "无法确认新服务已停止，未恢复旧服务，避免双实例运行。"; fi
-    fi
+    # Roll back every touched unit independently; one failure must not skip others.
+    for index in "${SOURCE_TOUCHED[@]+"${SOURCE_TOUCHED[@]}"}"; do
+      source_unit=${SOURCE_SERVICES[$index]}
+      if [ "$SAFE_TO_RESUME" = 1 ]; then
+        if [ "${SOURCE_DISABLE_ATTEMPTED[$index]:-0}" = 1 ]; then
+          case "${SOURCE_ENABLE_STATES[$index]}" in
+            enabled) systemctl enable "$source_unit" || error "旧服务自启动恢复失败：$source_unit";;
+            enabled-runtime) systemctl enable --runtime "$source_unit" || error "旧服务自启动恢复失败：$source_unit";;
+          esac
+        fi
+        case "${SOURCE_ACTIVE_STATES[$index]}" in
+          active|activating|reloading|deactivating) systemctl start "$source_unit" || error "旧服务恢复失败：$source_unit";;
+        esac
+      else
+        error "无法确认新服务已停止，未恢复旧服务 ${source_unit}，避免双实例运行。"
+      fi
+    done
     [ "$STOPPED" = 0 ] || service_start || error '旧服务恢复失败，请检查服务日志'
   fi
   rm -rf "$WORK"
@@ -204,32 +237,49 @@ if [ "$SERVICE" = 1 ] && [ -f "$UNIT" ]; then
   if [ "$OS" = linux ]; then EXISTING=$(systemctl show laowangbot -p WorkingDirectory --value); [ "$EXISTING" = "$ROOT" ] || die 'Existing service points at another root'; else grep -Fq "<string>$ROOT</string>" "$UNIT" || die 'Existing launch agent points at another root'; fi
   cp "$UNIT" "$WORK/unit"; HAD_UNIT=1
 fi
-if [ -n "$SOURCE_SERVICE" ]; then
-  source_matches "$SOURCE_SERVICE" || die '旧服务工作目录已变化，未停止服务'
-  SOURCE_ENABLE_STATE=$(systemctl show "$SOURCE_SERVICE" -p UnitFileState --value) || die '无法查询旧服务自启动状态，拒绝迁移'
-  case "$SOURCE_ENABLE_STATE" in
+# Snapshot and validate all selected services before touching any of them.
+for source_unit in "${SOURCE_SERVICES[@]+"${SOURCE_SERVICES[@]}"}"; do
+  source_matches "$source_unit" || die '旧服务工作目录已变化，未停止服务'
+  source_enabled=$(systemctl show "$source_unit" -p UnitFileState --value) || die '无法查询旧服务自启动状态，拒绝迁移'
+  case "$source_enabled" in
     enabled|enabled-runtime|disabled|masked) ;;
     *) die '旧服务由其他单元或启动器管理，请先禁用其自动启动后重试';;
   esac
-  SOURCE_TRIGGERS=$(systemctl show "$SOURCE_SERVICE" -p TriggeredBy --value) || die '无法核验旧服务触发器'
-  [ -z "$SOURCE_TRIGGERS" ] || die "旧服务存在触发器 $SOURCE_TRIGGERS，请先停用并移除触发关系后迁移"
-  OLD_STATE=$(systemctl show "$SOURCE_SERVICE" -p ActiveState --value) || die '无法查询旧服务状态，拒绝迁移'
-  case "$OLD_STATE" in
-    active|activating|reloading|deactivating) SOURCE_STOPPED=1;;
-    inactive|failed) ;;
+  source_triggers=$(systemctl show "$source_unit" -p TriggeredBy --value) || die '无法核验旧服务触发器'
+  [ -z "$source_triggers" ] || die "旧服务存在触发器 ${source_triggers}，请先停用并移除触发关系后迁移"
+  source_active=$(systemctl show "$source_unit" -p ActiveState --value) || die '无法查询旧服务状态，拒绝迁移'
+  case "$source_active" in
+    active|activating|reloading|deactivating|inactive|failed) ;;
     *) die '旧服务状态未知，拒绝迁移';;
   esac
-  systemctl stop "$SOURCE_SERVICE"
-  OLD_STATE=$(systemctl show "$SOURCE_SERVICE" -p ActiveState --value) || die '无法确认旧服务已停止'
-  [ "$OLD_STATE" = inactive ] || die '旧服务未完全停止，拒绝迁移'
-  if [ "$SOURCE_ENABLE_STATE" != masked ]; then
-    SOURCE_DISABLED=1
-    systemctl disable "$SOURCE_SERVICE"
-    if [ "$SOURCE_ENABLE_STATE" = enabled-runtime ]; then systemctl disable --runtime "$SOURCE_SERVICE"; fi
-    SOURCE_AFTER=$(systemctl show "$SOURCE_SERVICE" -p UnitFileState --value) || die '无法确认旧服务自启动已禁用'
-    case "$SOURCE_AFTER" in disabled|masked) ;; *) die '旧服务自启动未成功禁用，拒绝迁移';; esac
+  SOURCE_ENABLE_STATES+=("$source_enabled"); SOURCE_ACTIVE_STATES+=("$source_active")
+done
+index=0
+for source_unit in "${SOURCE_SERVICES[@]+"${SOURCE_SERVICES[@]}"}"; do
+  # Recheck immediately before stop: the unit may have changed since discovery.
+  source_matches "$source_unit" || die '旧服务工作目录已变化，拒绝停止服务'
+  SOURCE_TOUCHED+=("$index")
+  systemctl stop "$source_unit"
+  source_active=$(systemctl show "$source_unit" -p ActiveState --value) || die '无法确认旧服务已停止'
+  [ "$source_active" = inactive ] || die '旧服务未完全停止，拒绝迁移'
+  if [ "${SOURCE_ENABLE_STATES[$index]}" != masked ]; then
+    SOURCE_DISABLE_ATTEMPTED[$index]=1
+    systemctl disable "$source_unit"
+    if [ "${SOURCE_ENABLE_STATES[$index]}" = enabled-runtime ]; then systemctl disable --runtime "$source_unit"; fi
+    source_after=$(systemctl show "$source_unit" -p UnitFileState --value) || die '无法确认旧服务自启动已禁用'
+    case "$source_after" in disabled|masked) ;; *) die '旧服务自启动未成功禁用，拒绝迁移';; esac
   fi
-fi
+  index=$((index+1))
+done
+# Stopping a companion updater can restart another source unit; verify the set again.
+for source_unit in "${SOURCE_SERVICES[@]+"${SOURCE_SERVICES[@]}"}"; do
+  source_matches "$source_unit" || die '旧服务工作目录已变化，拒绝迁移'
+  source_active=$(systemctl show "$source_unit" -p ActiveState --value) || die '无法确认旧服务已停止'
+  source_enabled=$(systemctl show "$source_unit" -p UnitFileState --value) || die '无法确认旧服务自启动已禁用'
+  case "$source_active/$source_enabled" in inactive/disabled|inactive/masked) ;;
+    *) die "旧服务 $source_unit 再次运行或启用自启动，拒绝迁移";;
+  esac
+done
 mkdir -p "$ROOT"
 [ -z "$MIGRATE" ] || info "正在迁移 $FROM 配置、会话和数据…"
 [ -z "$MIGRATE" ] || "$WORK/new" --migrate "$MIGRATE" --from "$FROM" --root "$ROOT"
@@ -288,5 +338,5 @@ warn "本地配置检查通过；请在 Telegram 执行 .ping 确认连接。"
 if [ -n "$MIGRATE" ]; then
   success "迁移完成。旧部署保留在：$MIGRATE"
   info "迁移报告：$ROOT/migration-report.json"
-  if [ -n "$SOURCE_SERVICE" ]; then success "旧服务已停止并禁用开机启动：${SOURCE_SERVICE}"; fi
+  if [ "${#SOURCE_SERVICES[@]}" -gt 0 ]; then success "旧服务已停止并禁用开机启动：${SOURCE_SERVICES[*]}"; fi
 fi

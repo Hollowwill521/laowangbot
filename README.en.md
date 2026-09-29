@@ -120,4 +120,8 @@ Derived from [MiCat-S/mibot-lite](https://github.com/MiCat-S/mibot-lite), commit
 
 Since 0.1.8, official binaries include `monitor` and `qdsg`. Use `.monitor` and `.qdsg` directly, with no local Go compilation. State remains in `state/monitor` and `state/qdsg`; local OCR still needs its optional Python dependencies.
 
+The built-in `bh` account-expiry monitor supports EmbyBoss/custom checks, scheduled alerts, Bot notifications, and configuration import/export. Use `.bh` for help; state is stored in `state/bh`.
+
+The built-in `pmcaptcha` private-chat verifier is disabled by default on new installations. Use `.pmc` for help, `.pmc on` to enable rules, and `.pmc captcha on` to enable challenges. State is stored in `state/pmcaptcha`.
+
 TPM source installation, updates, removal, import and replacement are temporarily disabled. Use `.tpm ls -v` to inspect plugins, `.tpm s keyword` to search, and `.tpm ul name` to export existing external source. Bundled plugins update with `.update run`; existing custom source plugins retain their implementation and source-update path. See the [guide](docs/plugins.md).
