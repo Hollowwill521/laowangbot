@@ -34,16 +34,16 @@ func registerBundledHelp(a *app.App, external []compiled.Entry) {
 		}
 	}
 	if !custom["pmcaptcha"] {
-		for _, name := range []string{"pmc", "pmcaptcha"} {
+		for _, name := range []string{"pmcaptcha"} {
 			if c, ok := a.Registry.Lookup(name); ok {
-				c.Help = func(prefix string) string { return bundledHelp(prefix, "pmc", pmcaptcha.HelpText(".", "")) }
+				c.Help = func(prefix string) string { return bundledHelp(prefix, "pmcaptcha", pmcaptcha.HelpText(".", "")) }
 			}
 		}
 	}
 }
 
 func bundledHelp(prefix, name, text string) string {
-	if name == "qdsg" || name == "bh" || name == "pmc" {
+	if name == "qdsg" || name == "bh" || name == "pmc" || name == "pmcaptcha" {
 		return pluginapi.PanelHTML(text, name, prefix)
 	}
 	if name == "monitor" {
@@ -65,7 +65,7 @@ func pluginHelpHTML(text, prefix string) (string, bool) {
 		help := pmcaptcha.HelpText(".", section)
 		if strings.Contains(text, help) {
 			before, after, _ := strings.Cut(text, help)
-			return command.Escape(before) + bundledHelp(prefix, "pmc", help) + command.Escape(after), true
+			return command.Escape(before) + bundledHelp(prefix, "pmcaptcha", help) + command.Escape(after), true
 		}
 	}
 	return "", false

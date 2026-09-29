@@ -17,13 +17,13 @@ import (
 
 func registerManagement(a *app.App, m plugin.Manager) {
 	a.Registry.Register(&command.Command{Name: "tpm", Description: "查看内置和外部插件；源码修改暂时禁用", Usage: "search|ls|upload", Timeout: 30 * time.Minute, Help: func(p string) string {
-		return command.PlainHelp(tpmHelp(p), p, "tpm", "monitor", "qdsg", "bh", "pmc", "update")
+		return command.PlainHelp(tpmHelp(p), p, "tpm", "monitor", "qdsg", "bh", "pmcaptcha", "update")
 	}, Handle: func(ctx context.Context, inv *command.Invocation) error {
 		if len(inv.Args) == 0 || strings.EqualFold(inv.Arg(0), "help") || inv.Arg(0) == "h" {
-			return inv.Edit(ctx, command.PlainHelp(tpmHelp(inv.Prefix), inv.Prefix, "tpm", "monitor", "qdsg", "bh", "pmc", "update"))
+			return inv.Edit(ctx, command.PlainHelp(tpmHelp(inv.Prefix), inv.Prefix, "tpm", "monitor", "qdsg", "bh", "pmcaptcha", "update"))
 		}
 		if tpmMutationDisabled(inv.Args) {
-			return inv.EditText(ctx, "TPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。monitor、qdsg、bh、pmcaptcha 已内置，请直接使用 .monitor / .qdsg / .bh / .pmc；升级主程序请用 .update run。")
+			return inv.EditText(ctx, "TPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。monitor、qdsg、bh、pmcaptcha 已内置，请直接使用 .monitor / .qdsg / .bh / .pmcaptcha；升级主程序请用 .update run。")
 		}
 		binary, err := os.Executable()
 		if err != nil {

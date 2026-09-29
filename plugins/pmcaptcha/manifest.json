@@ -1,6 +1,6 @@
 {
  "name":"pmcaptcha", "version":"1.0.0", "description":"陌生人私聊人机验证、自动规则与分组管理（默认关闭）",
- "commands":["pmc","pmcaptcha"],"events":["message","outgoing"],
+ "commands":["pmcaptcha"],"events":["message","outgoing"],
  "capabilities":["self","resolve","messages","history","send","edit","delete","user_info","folders","chat_action","send_photo"],
  "protocol_version":2,"interval_seconds":1,"timeout_seconds":60,"package":"."
 }

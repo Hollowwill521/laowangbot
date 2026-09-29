@@ -42,7 +42,7 @@ func tpmHelp(prefix string) string {
 自动签到。
 .bh help
 Emby 保号。
-.pmc help
+.pmcaptcha help
 私聊验证。
 
 【查看与导出】

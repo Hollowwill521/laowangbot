@@ -9,11 +9,34 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/app"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
+	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
 // aliasDocument 对应 data/alias.json。
 type aliasDocument struct {
-	Aliases map[string]string `json:"aliases"`
+	Aliases             map[string]string `json:"aliases"`
+	PMCAliasInitialized bool              `json:"pmc_alias_initialized,omitempty"`
+}
+
+// Seed once so later alias edits and deletions survive restarts.
+func seedPMCAlias(saved *store.Store[aliasDocument]) error {
+	current, err := saved.Read()
+	if err != nil {
+		return err
+	}
+	if current.PMCAliasInitialized {
+		return nil
+	}
+	return saved.Update(func(d *aliasDocument) error {
+		if d.Aliases == nil {
+			d.Aliases = map[string]string{}
+		}
+		if _, exists := d.Aliases["pmc"]; !exists {
+			d.Aliases["pmc"] = "pmcaptcha"
+		}
+		d.PMCAliasInitialized = true
+		return nil
+	})
 }
 
 func aliasHelp(prefix string) string {
@@ -66,6 +89,9 @@ func renderAliases(aliases map[string]string, prefix string) string {
 // Register 注册 .alias，并把保存的别名表加载进注册表。
 func Register(a *app.App) {
 	saved := kit.NewStore(a, "alias.json", func() aliasDocument { return aliasDocument{Aliases: map[string]string{}} })
+	if err := seedPMCAlias(saved); err != nil {
+		a.Logger.Warn("alias.initialize_failed", "error", err.Error())
+	}
 	if current, err := saved.Read(); err != nil {
 		a.Logger.Warn("alias.load_failed", "error", err.Error())
 	} else {
