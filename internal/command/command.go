@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 	"log/slog"
 	"regexp"
 	"sort"
@@ -51,6 +52,26 @@ func (inv *Invocation) Rest(index int) string {
 // Edit 把命令消息改成 HTML 内容。
 func (inv *Invocation) Edit(ctx context.Context, html string) error {
 	return inv.Client.Edit(ctx, inv.Message, html)
+}
+
+// EditHelp keeps long help panels readable without splitting command entities.
+func (inv *Invocation) EditHelp(ctx context.Context, text string) error {
+	pages := pluginapi.PanelPages(text)
+	if strings.Contains(text, "<blockquote") || strings.Contains(text, "<pre>") {
+		pages = HTMLPages(text, 3500)
+	}
+	for i, page := range pages {
+		var err error
+		if i == 0 {
+			err = inv.Edit(ctx, page)
+		} else {
+			err = inv.Reply(ctx, page)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // EditText 把命令消息改成纯文本，原样显示。
@@ -424,7 +445,7 @@ func (r *Registry) run(ctx context.Context, client *bot.Client, message, trigger
 		if wantsHelp(inv.Args) {
 			// 和 MiBox 一样，「命令 --help」只显示帮助、不执行；有的命令根本不看参数，
 			// 不拦下来的话 .restart --help 就真的重启了。
-			err = inv.Edit(runCtx, command.HelpText(inv.Prefix))
+			err = inv.EditHelp(runCtx, command.HelpText(inv.Prefix))
 		} else {
 			err = command.Handle(runCtx, inv)
 		}

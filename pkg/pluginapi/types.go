@@ -75,6 +75,7 @@ type Outgoing struct {
 	Text   string `json:"text"`
 }
 type Response struct {
+	HTML     bool       `json:"html,omitempty"`
 	Version  int        `json:"version"`
 	Text     string     `json:"text,omitempty"`
 	Error    string     `json:"error,omitempty"`

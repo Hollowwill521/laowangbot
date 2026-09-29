@@ -767,7 +767,7 @@ func speedtestHelp(dataDir, prefix string, pinned int) string {
 		"speedtest clear</code> 恢复自动挑选\n• <code>" + p +
 		"speedtest config</code> 看当前设置\n• <code>" + p +
 		"speedtest diagnose</code> 检查 CLI 能否运行\n• <code>" + p +
-		"speedtest fix</code> / <code>update</code> 重新下载官方 CLI（版本固定为 " + ooklaVersion + "）\n\n<b>当前来源</b>\n" + command.Escape(source) +
+		"speedtest fix</code> / <code>" + p + "speedtest update</code> 重新下载官方 CLI（版本固定为 " + ooklaVersion + "）\n\n<b>当前来源</b>\n" + command.Escape(source) +
 		"\n\n<b>当前服务器</b>\n" + command.Escape(server) +
 		"\n\n用 Ookla 官方 CLI 测：它自己挑就近的测速服务器，报得出 ISP，还会给一张结果图。没装的话首次" +
 		"运行会把官方静态构件下载到部署目录（校验 SHA-256，不写系统目录），之后直接复用。\n\n" +

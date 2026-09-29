@@ -10,56 +10,109 @@ import (
 
 func (m *Monitor) help(chat string) string {
 	s := m.state.Settings
-	return fmt.Sprintf("总开关: %t · 监控全部: %t\n本群监听: %t · 本群屏蔽: %t\n\n", s.IsGlobalEnabled, s.MonitorAllGroups, slices.Contains(s.EnabledGroups, chat), slices.Contains(s.ExcludedGroups, chat)) + Help
+	return fmt.Sprintf("<b>当前状态</b>\n总开关：%s · 全群监控：%s\n本群监听：%s · 本群排除：%s\n\n", stateLabel(s.IsGlobalEnabled), stateLabel(s.MonitorAllGroups), stateLabel(slices.Contains(s.EnabledGroups, chat)), stateLabel(slices.Contains(s.ExcludedGroups, chat))) + Help
 }
 
 // Help is shared by the plugin command and host help registry.
-const Help = `<b>Monitor 命令帮助</b>
+const Help = `<b>Monitor · 消息监控帮助</b>
+点击等宽命令复制整行（包含前缀）。尖括号是需替换的参数；设置仅机主可改。
 
-以下命令均以 <code>.monitor</code> 开头，仅机主可修改设置。
-<code>.monitor help</code> 帮助；<code>.monitor list</code> / <code>.monitor list_groups</code> 配置列表
-<code>.monitor on</code> / <code>.monitor off</code> 添加/移除当前群监听
-<code>.monitor global on|off</code> 总开关
-<code>.monitor clean</code> 清空去重记录
-<code>.monitor send &lt;目标ID或用户名&gt; &lt;文本&gt;</code> 立即代发
-<code>.monitor sync &lt;目标&gt; &lt;备用群&gt; &lt;文本&gt;</code> 延迟同步；仅机主和可信 Leader 可触发
-
-<b>设置（前缀 .monitor set）</b>
-<code>.monitor set leader &lt;用户ID&gt;|del</code> 可信 Leader
-<code>.monitor set bot_token &lt;Token&gt;|del</code> 通知机器人
-<code>.monitor set bot_id &lt;用户ID&gt;|del</code> 排除该机器人消息
-以下设置接 <code>on|off</code>：
-<code>.monitor set monitor_all_groups on|off</code> 监控所有群
-<code>.monitor set dedup on|off</code> 24 小时去重
-<code>.monitor set monitor_admins_messages on|off</code> 管理员消息
-<code>.monitor set monitor_users_messages on|off</code> 普通用户消息
-<code>.monitor set ignore_bot_messages on|off</code>：沿用原版，on 监控机器人，off 忽略
-
-<code>.monitor set monitor_group add &lt;群ID/用户名/链接&gt;</code>
-<code>.monitor set monitor_group del &lt;序号或ID&gt;</code>
-<code>.monitor set exclude_group add &lt;群ID/用户名/链接&gt;</code>
-<code>.monitor set exclude_group del &lt;序号或ID&gt;</code>
-<code>.monitor set target add &lt;ID或用户名&gt; [备注]</code> 通知目标
-<code>.monitor set target del &lt;序号&gt;</code>
-<code>.monitor set keyword add &lt;关键词&gt;</code> 全局关键词
-<code>.monitor set keyword del &lt;序号或完整关键词&gt;</code>
-<code>.monitor set group_keyword add &lt;群&gt; &lt;关键词&gt;</code>
-<code>.monitor set group_keyword del &lt;群&gt; &lt;序号或完整关键词&gt;</code>
-<code>.monitor set group_keyword clear &lt;群&gt;</code>
-<code>.monitor set group_user add &lt;群&gt; &lt;用户ID&gt;</code>
-<code>.monitor set group_user add &lt;消息链接&gt;</code> 提取发送者
-<code>.monitor set group_user del &lt;群&gt; &lt;序号或用户ID&gt;</code>
-<code>.monitor set group_user clear &lt;群&gt;</code>
-群支持 ID、用户名或链接；序号从 1 起，按 list 数组顺序。
-普通关键词忽略大小写；正则支持 re:表达式、re:/表达式/flags。
-指定人绕过身份过滤；排除群优先。无 Bot Token 时通知没有交互按钮。
-
-<b>示例</b>
+<b>① 快速开始</b>
 <code>.monitor on</code>
+在当前群开启监听；还需总开关开启、配置关键词与通知目标。
 <code>.monitor set keyword add 抽奖</code>
-<code>.monitor set keyword add re:/抽奖|福利/i</code>
+添加一个全局关键词示例。
 <code>.monitor set target add -100123 通知群</code>
-<code>.monitor sync @ExampleBot -100123 /start abc</code>`
+添加通知目标；将 -100123 换成真实群 ID。
+<code>.monitor list</code>
+查看配置、编号及每项对应的操作命令。
+<code>.monitor help</code>
+查看本帮助。
+
+<b>② 开关与监听范围</b>
+<code>.monitor global on</code>
+开启总开关。
+<code>.monitor global off</code>
+关闭总开关，保留配置。
+<code>.monitor off</code>
+停止监听当前群。
+<code>.monitor set monitor_all_groups on</code>
+监听所有群；排除群仍优先。
+<code>.monitor set monitor_all_groups off</code>
+仅监听已添加的群。
+<code>.monitor set monitor_group add &lt;群ID/用户名/链接&gt;</code>
+添加指定监听群。
+<code>.monitor set monitor_group del &lt;序号或ID&gt;</code>
+移除监听群。
+<code>.monitor set exclude_group add &lt;群ID/用户名/链接&gt;</code>
+排除指定群。
+<code>.monitor set exclude_group del &lt;序号或ID&gt;</code>
+解除排除。
+
+<b>③ 关键词与指定用户</b>
+<code>.monitor set keyword add re:/抽奖|福利/i</code>
+正则示例；普通关键词忽略大小写，正则支持 re:表达式 或 re:/表达式/flags。
+<code>.monitor set keyword del &lt;序号或完整关键词&gt;</code>
+删除全局关键词。
+<code>.monitor set group_keyword add &lt;群&gt; &lt;关键词&gt;</code>
+为单个群添加关键词。
+<code>.monitor set group_keyword del &lt;群&gt; &lt;序号或完整关键词&gt;</code>
+删除该群的一个关键词。
+<code>.monitor set group_keyword clear &lt;群&gt;</code>
+清空该群关键词。
+<code>.monitor set group_user add &lt;群&gt; &lt;用户ID&gt;</code>
+关注该群指定人；指定人绕过身份过滤，排除群仍优先。
+<code>.monitor set group_user add &lt;消息链接&gt;</code>
+从消息链接提取发送者。
+<code>.monitor set group_user del &lt;群&gt; &lt;序号或用户ID&gt;</code>
+移除一个关注用户。
+<code>.monitor set group_user clear &lt;群&gt;</code>
+清空该群关注用户。
+
+<b>④ 身份过滤与去重</b>
+<code>.monitor set monitor_admins_messages on</code>
+监控管理员消息。
+<code>.monitor set monitor_admins_messages off</code>
+不监控管理员消息。
+<code>.monitor set monitor_users_messages on</code>
+监控普通用户消息。
+<code>.monitor set monitor_users_messages off</code>
+不监控普通用户消息。
+<code>.monitor set ignore_bot_messages on</code>
+沿用旧版字段语义：on 表示监控机器人。
+<code>.monitor set ignore_bot_messages off</code>
+off 表示忽略机器人。
+<code>.monitor set dedup on</code>
+开启 24 小时去重。
+<code>.monitor set dedup off</code>
+关闭去重。
+<code>.monitor clean</code>
+清空现有去重记录。
+
+<b>⑤ 通知与权限</b>
+<code>.monitor set target del &lt;序号&gt;</code>
+删除通知目标；序号从 1 起，以配置列表为准。
+<code>.monitor set bot_token &lt;Token&gt;</code>
+设置通知 Bot，仅在收藏夹执行；未设置时使用账号通知，无交互按钮。
+<code>.monitor set bot_token del</code>
+移除通知 Bot Token。
+<code>.monitor set bot_id &lt;用户ID&gt;</code>
+排除该通知机器人自身消息。
+<code>.monitor set bot_id del</code>
+清除通知机器人 ID。
+<code>.monitor set leader &lt;用户ID&gt;</code>
+设置可信 Leader，仅授权触发同步，不授权修改配置。
+<code>.monitor set leader del</code>
+撤销 Leader。
+
+<b>⑥ 代发与同步</b>
+<code>.monitor send &lt;目标ID或用户名&gt; &lt;文本&gt;</code>
+立即向目标发送文本。
+<code>.monitor sync &lt;目标&gt; &lt;备用群&gt; &lt;文本&gt;</code>
+延迟同步；目标不可发送时尝试备用群，仅机主或可信 Leader 可触发。
+<code>.monitor sync @ExampleBot -100123 /start abc</code>
+同步示例：替换目标及备用群后使用。
+群参数支持 ID、用户名或链接；删除前先查看配置列表确认序号。`
 
 func validateCommand(a []string) error {
 	bad := func() error { return fmt.Errorf("参数无效，请使用 .monitor help 查看命令用法") }

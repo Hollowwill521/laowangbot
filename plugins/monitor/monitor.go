@@ -181,12 +181,25 @@ func (m *Monitor) Handle(ctx context.Context, r api.Request) api.Response {
 		var text string
 		text, err = m.command(ctx, e, args)
 		if err == nil && text != "" {
-			if strings.Contains(text, Help) {
+			panel := len(args) == 0 || arg(args, 0) == "help" || arg(args, 0) == "list" || arg(args, 0) == "list_groups"
+			if panel {
+				prefix := "."
 				if fields := strings.Fields(r.Text); len(fields) > 0 && strings.HasSuffix(fields[0], "monitor") {
-					text = strings.ReplaceAll(text, ".monitor", html.EscapeString(fields[0]))
+					prefix = strings.TrimSuffix(fields[0], "monitor")
 				}
+				text = strings.ReplaceAll(text, "<code>.monitor ", "<code>"+html.EscapeString(prefix)+"monitor ")
+				for i, page := range api.PanelPages(text) {
+					if i > 0 {
+						e.Out = false
+						e.MessageID = 0
+					}
+					if err = m.reply(ctx, e, page, 100); err != nil {
+						break
+					}
+				}
+			} else {
+				err = m.reply(ctx, e, text, 100)
 			}
-			err = m.reply(ctx, e, text, 100)
 		}
 	case "event":
 		err = m.event(ctx, e)
@@ -298,19 +311,7 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (text st
 	case "", "help":
 		return m.help(e.ChatID), nil
 	case "list", "list_groups":
-		text := m.details(ctx)
-		if len(text) <= 3800 {
-			return text, nil
-		}
-		body := strings.TrimSuffix(strings.SplitN(text, "<pre>", 2)[1], "</pre>")
-		for i, part := range escapedChunks(html.UnescapeString(body), 3000) {
-			if err := m.reply(ctx, e, fmt.Sprintf("<b>监控配置（第 %d 段）</b>\nBot Token 已设置: %t\n<pre>%s</pre>", i+1, s.BotToken != "", part), 100); err != nil {
-				return "", err
-			}
-			e.Out = false
-			e.MessageID = 0
-		}
-		return "", nil
+		return m.details(ctx), nil
 	case "clean":
 		n := len(m.state.Dedup)
 		m.state.Dedup = map[string]int64{}
@@ -491,12 +492,7 @@ func (m *Monitor) command(ctx context.Context, e api.Event, a []string) (text st
 	}
 	return "✅ 监控配置已更新", m.save()
 }
-func (m *Monitor) details(ctx context.Context) string {
-	s := m.state.Settings
-	s.BotToken = ""
-	b, _ := json.MarshalIndent(s, "", "  ")
-	return fmt.Sprintf("<b>监控配置</b>\nBot Token 已设置: %t\n<pre>%s</pre>", m.state.Settings.BotToken != "", html.EscapeString(string(b)))
-}
+
 func taskKey(t, f, text string) string {
 	return strings.TrimSpace(t) + "|" + strings.TrimSpace(f) + "|" + strings.TrimSpace(text)
 }

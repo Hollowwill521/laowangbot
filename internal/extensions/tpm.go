@@ -33,7 +33,34 @@ type tpmResult struct {
 }
 
 func tpmHelp(prefix string) string {
-	return "📦 laowangbot 插件管理器\n\nmonitor、qdsg、bh、pmcaptcha 已内置，可直接使用 " + prefix + "monitor / " + prefix + "qdsg / " + prefix + "bh / " + prefix + "pmc；无需安装或本地编译，随主程序更新。\n\n" + prefix + "tpm search/s [关键词]：搜索远程插件目录\n" + prefix + "tpm ls/list [-v] 或 lv：查看内置和外部插件\n" + prefix + "tpm upload/ul 名称：导出已有外部插件源码包\n\nTPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。\n升级主程序：" + prefix + "update check / " + prefix + "update run。只有内置插件时下载官方二进制；保留既有外部源码插件的部署仍需源码构建。"
+	return strings.ReplaceAll(`📦 laowangbot 插件管理器
+
+【已内置，无需安装】
+.monitor help
+消息监控。
+.qdsg help
+自动签到。
+.bh help
+Emby 保号。
+.pmc help
+私聊验证。
+
+【查看与导出】
+.tpm search [关键词]
+搜索远程插件目录。
+.tpm ls
+查看内置和外部插件。
+.tpm ls -v
+查看详细来源与版本。
+.tpm upload 名称
+导出已有外部插件源码包。
+
+【程序升级】
+.update check
+检查新版本。
+.update run
+升级主程序。只有内置插件时下载官方二进制；已有外部源码插件时仍需源码构建。
+TPM 源码安装、更新、卸载、导入和替换暂时禁用，避免服务器本地编译。`, "\n.", "\n"+prefix)
 }
 
 func executeTPM(ctx context.Context, m tpmManager, args []string, progress func(string) error) (tpmResult, error) {

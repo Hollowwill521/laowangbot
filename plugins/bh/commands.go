@@ -250,7 +250,7 @@ func (p *Plugin) command(ctx context.Context, a []string, ev api.Event) (string,
 			}
 		}
 		if len(ts) == 0 {
-			return "暂无保号任务", nil
+			return "暂无保号任务\n.bh help", nil
 		}
 		var lines []string
 		for _, t := range ts {
@@ -271,6 +271,11 @@ func (p *Plugin) command(ctx context.Context, a []string, ev api.Event) (string,
 				}
 				line += fmt.Sprintf("\nCron: %s\n模式: %s\n命令: %s\n正则: %s\n随机延迟: %s\n手动过期: %s\n上次执行: %s\n上次结果: %s", t.Cron, t.Mode, t.Command, t.Regex, random, expire, t.LastRun, t.LastResult)
 			}
+			action := "disable"
+			if t.Disabled {
+				action = "enable"
+			}
+			line += "\n立即检查：\n.bh now " + t.ID + "\n切换启用状态：\n.bh " + action + " " + t.ID + "\n详细配置：\n.bh info " + t.ID
 			lines = append(lines, line)
 		}
 		return strings.Join(lines, "\n\n"), nil

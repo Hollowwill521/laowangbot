@@ -14,39 +14,56 @@ import (
 
 const Help = `Emby 保号管家
 
-➕ 添加与修改任务
+【➕ 添加与修改任务】
 .bh add [5/6段Cron或now] [Bot] [embyboss/custom] [命令或-] [正则或-] [random 分钟范围] [expire 天数] [备注]
-.bh badd [Cron或now] @Bot1 @Bot2 ...（别名 batchadd；默认随机0-15分钟）
-.bh edit [ID/范围/all] [cron/bot/mode/cmd/regex/random/expire/remark] [值]（别名 set）
+.bh badd [Cron或now] @Bot1 @Bot2 ...
+别名 batchadd；默认随机0-15分钟
+.bh edit [ID/范围/all] [cron/bot/mode/cmd/regex/random/expire/remark] [值]
+别名 set
 
-💡 可复制示例
+【💡 可复制示例】
 .bh add 0 9 * * * @EmbyTestBot embyboss - - random 5-15 服务
 .bh add "0 9 * * *" @EmbyTestBot custom "/start|我的数据" "上次观看.*?(\d{4}-\d{2}-\d{2})" expire 15 服务
 .bh edit 1-5 expire 30
 
-📋 任务管理
-.bh info [ID/all] — 详细配置及历史结果
-.bh list — 所有任务及剩余天数（别名 ls）
-.bh rm [ID/范围/机器人名/备注/all] — 删除任务
-.bh disable [ID] / .bh enable [ID] — 暂停/启用
+【📋 任务管理】
+.bh info [ID/all]
+详细配置及历史结果
+.bh list
+所有任务及剩余天数（别名 ls）
+.bh rm [ID/范围/机器人名/备注/all]
+删除任务
+.bh disable [ID]
+暂停任务。
+.bh enable [ID]
+启用任务。
 
-🚀 立即执行
-.bh now — 检测所有启用任务
-.bh now [ID] — 单独检测，允许检查已暂停任务
+【🚀 立即执行】
+.bh now
+检测所有启用任务
+.bh now [ID]
+单独检测，允许检查已暂停任务
 原消息显示进度和最终报告；手动也按通知配置通过 Bot 推送。
 
-⚙️ 通知配置
-.bh config — 查看脱敏配置
-.bh bottoken [Token] — 发信 Bot Token
-.bh target [ChatID] — 通知接收人
-.bh threshold [预警天数] [危险天数] — 如 7 3
+【⚙️ 通知配置】
+.bh config
+查看脱敏配置
+.bh bottoken [Token]
+发信 Bot Token
+.bh target [ChatID]
+通知接收人
+.bh threshold [预警天数] [危险天数]
+如 7 3
 定时仅异常/临期推送；通知未配置或失败会明确报告，绝不假称发送成功。
 
-🔄 导入/导出
-.bh tpm ul — 导出 baohao_config.json，清空 Token/ChatID
-回复 baohao_config.json 执行 .bh tpm i — 完整校验后导入，永远保留本地 Token/ChatID
+【🔄 导入/导出】
+.bh tpm ul
+导出 baohao_config.json，清空 Token/ChatID
+回复 baohao_config.json 后执行：
+.bh tpm i
+完整校验后导入，永远保留本地 Token/ChatID
 
-参数说明
+【参数说明】
 Cron按系统本地时区；now作为添加时间表示每天此刻。
 random on/off 或数字/范围（分钟）；expire 0 恢复自动识别。
 custom 命令以 | 分隔首条命令和多级内联按钮，自定义正则必须含第一个日期捕获组。

@@ -62,8 +62,8 @@ var stickerSetName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 func yvluHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "📝 <b>生成文字语录贴纸</b>\n\n• <code>" + p + "yvlu [消息数]</code> 回复消息生成语录，最多 5 条\n• <code>" + p +
-		"yvlu r [消息数]</code> 包含被引用的内容\n• <code>" + p + "yvlu f 文本</code> 伪造文本（<code>fr</code> 同时包含回复）\n• <code>" + p +
-		"yvlu u 用户ID/用户名 [消息数]</code> 伪造发送者（<code>ur</code> 同时包含回复）\n• <code>" + p +
+		"yvlu r [消息数]</code> 包含被引用的内容\n• <code>" + p + "yvlu f 文本</code> 伪造文本（<code>" + p + "yvlu fr 文本</code> 同时包含回复）\n• <code>" + p +
+		"yvlu u 用户ID/用户名 [消息数]</code> 伪造发送者（<code>" + p + "yvlu ur 用户ID/用户名 [消息数]</code> 同时包含回复）\n• <code>" + p +
 		"yvlu webp|image|png|stories [消息数]</code> 指定输出格式\n• <code>" + p + "yvlu s</code> 保存回复的贴纸或图片到贴纸包\n• <code>" + p +
 		"yvlu config</code> 查看配置\n• <code>" + p + "yvlu config sticker 名称</code> 设置贴纸包\n\n图片由远程 quote 服务渲染，需要网络可达。"
 }

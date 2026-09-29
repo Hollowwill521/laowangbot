@@ -166,7 +166,15 @@ func (p *Plugin) Handle(ctx context.Context, r api.Request) api.Response {
 	if e != nil {
 		return api.Response{Version: 1, Error: e.Error()}
 	}
-	return api.Response{Version: 1, Text: text}
+	panel := len(a) == 0 || a[0] == "help" || a[0] == "list" || a[0] == "ls" || a[0] == "info" || a[0] == "config"
+	if panel {
+		prefix := "."
+		if fields := strings.Fields(r.Text); len(fields) > 0 && strings.HasSuffix(fields[0], "bh") {
+			prefix = strings.TrimSuffix(fields[0], "bh")
+		}
+		text = api.PanelHTML(text, "bh", prefix)
+	}
+	return api.Response{Version: 1, Text: text, HTML: panel}
 }
 func (p *Plugin) enqueue(tasks []Task, manual bool, ev api.Event, now time.Time) error {
 	if len(tasks) == 0 {

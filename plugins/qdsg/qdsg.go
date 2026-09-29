@@ -316,7 +316,15 @@ func (p *Plugin) Handle(ctx context.Context, r api.Request) api.Response {
 	if err != nil {
 		return api.Response{Version: 1, Error: err.Error()}
 	}
-	return api.Response{Version: 1, Text: out}
+	panel := len(a) == 0 || a[0] == "help" || a[0] == "list" || a[0] == "ls" || (a[0] == "aiconfig" && (len(a) == 1 || a[1] == "list"))
+	if panel {
+		prefix := "."
+		if fields := strings.Fields(r.Text); len(fields) > 0 && strings.HasSuffix(fields[0], "qdsg") {
+			prefix = strings.TrimSuffix(fields[0], "qdsg")
+		}
+		out = api.PanelHTML(out, "qdsg", prefix)
+	}
+	return api.Response{Version: 1, Text: out, HTML: panel}
 }
 func sleep(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)

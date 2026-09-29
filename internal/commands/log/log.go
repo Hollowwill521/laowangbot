@@ -95,7 +95,7 @@ func logHelp(prefix string) string {
 		p + "log</code> 最近 " + strconv.Itoa(logDefaultLines) + " 行\n• <code>" + p +
 		"log 50</code> 指定行数\n• <code>" + p + "log error</code> 只要错误\n• <code>" + p +
 		"log warn</code> 警告及以上\n• <code>" + p + "log speedtest</code> 含该词的行\n• <code>" +
-		p + "log debug on</code> 临时调到 debug 级别，<code>off</code> 调回来\n\n<b>脱敏</b>\n" +
+		p + "log debug on</code> 临时调到 debug 级别，<code>" + p + "log debug off</code> 调回来\n\n<b>脱敏</b>\n" +
 		"聊天与账号 ID 在写进内存时就换成了 #xxxx，同一个仍然是同一个，但看不出是谁；" +
 		"消息内容、密钥、URL 路径和 IP 地址直接丢弃。文件可以放心转发。\n\n" +
 		"日志只留在进程里，重启就没了。要看重启之前的，得上服务器翻 journalctl。"

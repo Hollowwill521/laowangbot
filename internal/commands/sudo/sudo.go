@@ -405,7 +405,7 @@ func sudoHelp(prefix string) string {
 		"• <code>" + p + "sudo del</code> 同上\n" +
 		"• <code>" + p + "sudo ls</code> 用户名单\n" +
 		"• <code>" + p + "sudo chat add</code> 把当前对话（或带上 ID、@名称）加进对话名单\n" +
-		"• <code>" + p + "sudo chat del</code> / <code>chat ls</code>\n\n" +
+		"• <code>" + p + "sudo chat del</code> / <code>" + p + "sudo chat ls</code>\n\n" +
 		"⚠️ 没设对话名单时，名单里的人在所有有你的对话里都能用。\n\n" +
 		"<b>能借出去的命令</b>\n" + command.Escape(delegableList(prefix)) + "\n" +
 		"其中改设置的子命令（如 ai config、sum config、speedtest set）不行。\n\n" +
@@ -418,13 +418,13 @@ func sureHelp(prefix string) string {
 	return "✅ <b>sure：让别人触发指定的消息或命令</b>\n\n" +
 		"比 sudo 窄：名单里的人发的消息要和规则对上，账号才会以你的身份发出去；规则可以重定向成别的命令。\n\n" +
 		"<b>用户和对话</b>\n" +
-		"• <code>" + p + "sure add</code> / <code>del</code> / <code>ls</code> 和 sudo 一样\n" +
-		"• <code>" + p + "sure chat add</code> / <code>del</code> / <code>ls</code> 对话名单，没设就处处可用\n\n" +
+		"• <code>" + p + "sure add</code> / <code>" + p + "sure del</code> / <code>" + p + "sure ls</code> 和 sudo 一样\n" +
+		"• <code>" + p + "sure chat add</code> / <code>" + p + "sure chat del</code> / <code>" + p + "sure chat ls</code> 对话名单，没设就处处可用\n\n" +
 		"<b>消息规则（至少要有一条才会生效）</b>\n" +
 		"• <code>" + p + "sure msg add 消息原文</code> 整条消息一致才算\n" +
 		"• <code>" + p + "sure msg add _command:/sb</code> 以 /sb 开头的都算，如 /sb 和 /sb 123\n" +
 		"• <code>" + p + "sure msg redirect 编号 " + p + "ban</code> 重定向：/sb 123 会变成 " + p + "ban 123；不写目标就是清除重定向\n" +
-		"• <code>" + p + "sure msg del 编号</code> / <code>msg ls</code>\n\n" +
+		"• <code>" + p + "sure msg del 编号</code> / <code>" + p + "sure msg ls</code>\n\n" +
 		"<b>典型用法</b>\n规则 <code>_command:/sb</code> 重定向到 <code>" + p + "ban</code>，再把群成员加进用户名单。他们回复某人发 /sb，就会以你的身份执行 <code>" + p + "ban</code>。" +
 		"触发的那条消息 5 秒后删掉（需要管理员权限）。\n\n" +
 		"⚠️ 重定向出来的命令和 sudo 一样受限，只限本人的命令不会被执行。"

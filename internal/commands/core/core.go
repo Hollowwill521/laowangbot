@@ -74,15 +74,15 @@ func Register(a *app.App) {
 		}},
 		&command.Command{Name: "help", Description: "查看命令列表或单条命令说明", Usage: "[命令]", Handle: func(ctx context.Context, inv *command.Invocation) error {
 			if name := inv.Arg(0); name != "" {
-				return inv.Edit(ctx, renderCommandHelp(registry, inv.Prefix, name))
+				return inv.EditHelp(ctx, renderCommandHelp(registry, inv.Prefix, name))
 			}
-			return inv.Edit(ctx, renderHelpList(registry, inv.Prefix))
+			return inv.EditHelp(ctx, renderHelpList(registry, inv.Prefix))
 		}},
 		&command.Command{Name: "h", Description: "help 的简写", Hidden: true, Handle: func(ctx context.Context, inv *command.Invocation) error {
 			if name := inv.Arg(0); name != "" {
-				return inv.Edit(ctx, renderCommandHelp(registry, inv.Prefix, name))
+				return inv.EditHelp(ctx, renderCommandHelp(registry, inv.Prefix, name))
 			}
-			return inv.Edit(ctx, renderHelpList(registry, inv.Prefix))
+			return inv.EditHelp(ctx, renderHelpList(registry, inv.Prefix))
 		}},
 	)
 }

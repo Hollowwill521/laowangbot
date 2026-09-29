@@ -603,18 +603,18 @@ func (s *acnService) restore(ctx context.Context, client *bot.Client, user *acnU
 func acnHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "🤖 <b>自动昵称更新</b>\n\n<b>快速开始</b>\n1. <code>" + p + "acn save</code> 保存当前昵称（首次必须）\n2. <code>" + p +
-		"acn on</code> 开启，之后每分钟自动更新\n\n<b>基础</b>\n• <code>" + p + "acn on</code> / <code>off</code> 开关\n• <code>" + p +
+		"acn on</code> 开启，之后每分钟自动更新\n\n<b>基础</b>\n• <code>" + p + "acn on</code> / <code>" + p + "acn off</code> 开关\n• <code>" + p +
 		"acn mode</code> 循环切换 time → text → both\n• <code>" + p + "acn update</code> 立即更新一次\n• <code>" + p +
-		"acn reset</code> 恢复原始昵称并停用\n• <code>" + p + "acn status</code> / <code>config</code> 查看状态\n\n<b>时区</b>\n• <code>" + p +
-		"acn tz Asia/Shanghai</code> 设置时区\n• <code>" + p + "acn tz on</code> / <code>off</code> 是否显示时区\n• <code>" + p +
-		"acn tz format GMT|UTC|simp|offset|custom:文字</code>\n\n<b>外观</b>\n• <code>" + p + "acn emoji on</code> / <code>off</code> 时钟表情\n• <code>" + p +
-		"acn time on</code> / <code>off</code> 时间显示\n• <code>" + p + "acn time 12</code> / <code>24</code> 12 或 24 小时制\n• <code>" + p +
-		"acn weekday on</code> / <code>off</code> 星期显示（默认关闭，按设置时区）\n• <code>" + p + "acn weekday zh|en|both</code> 中文/英文/中英（默认 zh）；也支持 weekday format zh|en|both\n• <code>" + p + "acn style normal|italic|double|sans|mono|outline</code>\n• <code>" + p +
+		"acn reset</code> 恢复原始昵称并停用\n• <code>" + p + "acn status</code> / <code>" + p + "acn config</code> 查看状态\n\n<b>时区</b>\n• <code>" + p +
+		"acn tz Asia/Shanghai</code> 设置时区\n• <code>" + p + "acn tz on</code> / <code>" + p + "acn tz off</code> 是否显示时区\n• <code>" + p +
+		"acn tz format GMT|UTC|simp|offset|custom:文字</code>\n\n<b>外观</b>\n• <code>" + p + "acn emoji on</code> / <code>" + p + "acn emoji off</code> 时钟表情\n• <code>" + p +
+		"acn time on</code> / <code>" + p + "acn time off</code> 时间显示\n• <code>" + p + "acn time 12</code> / <code>" + p + "acn time 24</code> 12 或 24 小时制\n• <code>" + p +
+		"acn weekday on</code> / <code>" + p + "acn weekday off</code> 星期显示（默认关闭，按设置时区）\n• <code>" + p + "acn weekday zh|en|both</code> 中文/英文/中英（默认 zh）；也支持 weekday format zh|en|both\n• <code>" + p + "acn style normal|italic|double|sans|mono|outline</code>\n• <code>" + p +
 		"acn order name,weekday,text,time,weather,emoji,timezone</code>（同时开关其中的时间、星期、表情、时区）\n• <code>" + p +
-		"acn show time|weekday|text|weather on</code> / <code>off</code> 只显示选中的组件，<code>" + p + "acn show reset</code> 恢复\n\n<b>文案</b>\n• <code>" + p +
+		"acn show time|weekday|text|weather on</code> / <code>" + p + "acn show time|weekday|text|weather off</code> 只显示选中的组件，<code>" + p + "acn show reset</code> 恢复\n\n<b>文案</b>\n• <code>" + p +
 		"acn text add 摸鱼中</code>（支持多行）\n• <code>" + p +
-		"acn text list</code> / <code>del 序号</code> / <code>clear</code>\n• <code>" + p + "acn text on</code> / <code>off</code>\n\n<b>天气</b>\n• <code>" + p +
-		"acn weather set 北京</code> 设置地点并开启\n• <code>" + p + "acn weather on</code> / <code>off</code>\n天气缓存 30 分钟。"
+		"acn text list</code> / <code>" + p + "acn text del 序号</code> / <code>" + p + "acn text clear</code>\n• <code>" + p + "acn text on</code> / <code>" + p + "acn text off</code>\n\n<b>天气</b>\n• <code>" + p +
+		"acn weather set 北京</code> 设置地点并开启\n• <code>" + p + "acn weather on</code> / <code>" + p + "acn weather off</code>\n天气缓存 30 分钟。"
 }
 
 // Register 注册 .acn 以及每分钟刷新一次的后台任务。

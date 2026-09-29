@@ -95,6 +95,22 @@ func (p *Plugin) Handle(ctx context.Context, r api.Request) api.Response {
 				}
 			}
 			out.Text, err = p.command(ctx, a, ev)
+			if len(a) > 0 && a[0] == "status" && err == nil {
+				out.Text += "\n\n【操作入口】\n.pmc h set\n修改设置。\n.pmc wl\n查看白名单。\n.pmc record failed\n查看失败记录。"
+			}
+			if err == nil && (len(a) == 0 || a[0] == "status" || a[0] == "folders" || (len(a) == 1 && (a[0] == "wl" || a[0] == "whitelist")) || (a[0] == "record" && (len(a) == 1 || a[1] != "del")) || a[0] == "h" || a[0] == "help" || a[0] == "?" || strings.Contains(out.Text, HelpText(".", "set")) || strings.Contains(out.Text, HelpText(".", "captcha"))) {
+				prefix := "."
+				if fields := strings.Fields(r.Text); len(fields) > 0 {
+					for _, name := range []string{"pmcaptcha", "pmc"} {
+						if strings.HasSuffix(fields[0], name) {
+							prefix = strings.TrimSuffix(fields[0], name)
+							break
+						}
+					}
+				}
+				out.Text = api.PanelHTML(out.Text, "pmc", prefix)
+				out.HTML = true
+			}
 		}
 	}
 	if err != nil {

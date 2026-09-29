@@ -19,14 +19,14 @@ const Help = `🤖 QDSG 自动化签到引擎
 
 支持文本、回复按钮、内联按钮、图片选项、西瓜序列、math、appcf 和 Moon，支持 AI 视觉/文本解析。
 
-➕ 1. 任务创建（add）
+【1. 任务创建（add）】
 .qdsg add [时间] [Bot] [模式] [内容] [高级参数...]
 .qdsg add 0 0 8 * * * @XiGuaBoss_bot inline 签到 random 5-50 西瓜
 .qdsg add 0 0 8 * * * @roc_admin_bot /checkin random 5-50 Roc
 .qdsg add 0 0 8 * * * @Moonkkbot appcf 签到 2000 random 5-50 Moon
 .qdsg add now @bot inline 签到 ai local steps 3 retry 2 interval 5 2000 random 1-50 名字
 
-示例中的 . 为命令前缀，按宿主实际配置替换。
+点击等宽命令复制整行（含前缀）。方括号内容是待替换参数；下面的真实示例可复制后修改机器人名称。
 时间使用 now（每天此刻，不会立即执行）或六段 Cron（秒 分 时 日 月 星期）。Bot 如 @bot_name。
 模式：text、reply、inline、imagechoice、xigua、math（calc）、appcf（app_cf/app-cf）、moon；默认 text。仅提供时间和 Bot 时发送“签到”，随机延迟 0–1 分钟。
 内容是口令或按钮文字；内联多级点击用 | 分隔，例如 签到|确认；动态按钮支持 re:点击数字(\d+)。
@@ -42,34 +42,60 @@ math 会解析“请计算：94 + 3 = ?”等加减乘除算式并回复数字�
 • aitype auto/text/image：自动判断或强制文本/图片
 • 末尾无法解析的文字：作为备注
 
-✏️ 2. 任务修改（edit）
+【2. 任务修改（edit）】
 .qdsg edit [ID/范围/all] [属性] [值]
 属性：cron/time、bot、mode、cmd/command、wait、random、remark/note、ai/useai、provider/aiprovider、prompt/aiprompt、steps、retry/retrycount、interval/retryinterval、aitype/aitarget。
 ai on/off 开关识别；aitype 支持 auto、text、image。
 .qdsg edit 1-3,5 random off
 
-📋 3. 任务管理
-.qdsg list（或 ls）查看详情、下次执行时间和上次结果。
-.qdsg rm [选择器]：删除
-.qdsg enable [选择器]：恢复
-.qdsg disable [选择器]：暂停。
+【3. 任务管理】
+.qdsg list
+  查看任务状态、下次执行时间、结果和操作命令；ls 为别名。
+.qdsg rm [选择器]
+  删除
+.qdsg enable [选择器]
+  恢复
+.qdsg disable 1
+  示例：暂停任务 1。
+.qdsg disable [选择器]
+  暂停。
 选择器支持 ID、范围 1-3,5、@机器人、备注、all。
-.qdsg reorder：重置任务编号
-.qdsg reload：重新加载配置和定时器。
+.qdsg reorder
+  重置任务编号
+.qdsg reload
+  重新加载配置和定时器。
 
-🚀 4. 执行与测试
-.qdsg now [ID/范围/all]：立即排队执行任务，原消息更新排队、执行中和完成/失败；手动任务不发收藏通知。
-.qdsg test [provider] [提示词]：回复一条图片或文本消息测试 AI 解析。
+【4. 执行与测试】
+.qdsg now 1
+  示例：立即执行任务 1。
+.qdsg now [ID/范围/all]
+  立即排队执行任务，原消息更新排队、执行中和完成/失败；手动任务不发收藏通知。
+.qdsg test [provider] [提示词]
+  回复一条图片或文本消息测试 AI 解析。
 
-⚙️ 5. 系统配置
-.qdsg notify on/off/@user/me：设置签到结果通知接收人。
-.qdsg cfbucket [ID]：绑定 npoint 云端外援 ID；cfbucket off 清除。
-.qdsg aiconfig list：查看配置（密钥会遮盖）。
-.qdsg aiconfig set [key] [value]：设置 openai_key/base/model、gemini_key/base/model、provider、prompt。
-.qdsg aiconfig addcustom [ID] [URL] [Model] [Key]：添加第三方模型。
-.qdsg aiconfig rmcustom [ID]：删除第三方模型。
+【5. 系统配置】
+.qdsg notify on
+  开启定时结果通知。
+.qdsg notify off
+  关闭定时结果通知。
+.qdsg notify me
+  接收到收藏夹；也可将 me 改为 @用户名。
+.qdsg cfbucket [ID]
+  绑定 npoint 云端外援 ID。
+.qdsg cfbucket off
+  清除云端外援。
+.qdsg aiconfig list
+  查看配置（密钥会遮盖）。
+.qdsg aiconfig set [key] [value]
+  设置 openai_key/base/model、gemini_key/base/model、provider、prompt。
+.qdsg aiconfig addcustom [ID] [URL] [Model] [Key]
+  添加第三方模型。
+.qdsg aiconfig rmcustom [ID]
+  删除第三方模型。
 
-本地 AI 需 Python 与 ddddocr、opencv-python-headless、numpy；CF 需独立外援。回复验证码使用 .qdsg test local：检查本地 OCR。
+本地 AI 需 Python 与 ddddocr、opencv-python-headless、numpy；CF 需独立外援。
+.qdsg test local
+  回复验证码执行，检查本地 OCR。
 `
 
 var modes = map[string]string{"text": "text", "reply": "reply_button", "reply_button": "reply_button", "inline": "inline_button", "inline_button": "inline_button", "imagechoice": "image_choice", "image_choice": "image_choice", "xigua": "xigua_sequence", "xigua_sequence": "xigua_sequence", "math": "math", "calc": "math", "appcf": "app_cf", "app_cf": "app_cf", "app-cf": "app_cf", "moon": "moon"}
@@ -436,22 +462,7 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 	case "help":
 		return Help, nil
 	case "list", "ls":
-		var lines []string
-		for _, t := range p.db.Tasks {
-			status := "启用"
-			if t.Disabled {
-				status = "禁用"
-			}
-			line := fmt.Sprintf("%s %s @%s [%s] %s\nCron: %s; %s | %s\nwait=%d random=%t(%d-%dms) AI=%t/%s/%s steps=%d retry=%d interval=%g\n备注: %s; 提示词: %s\n上次: %s 结果: %s 错误: %s", t.ID, status, t.Bot, t.Mode, t.Display, t.Cron, t.Command, t.Secondary, t.Wait, t.Random, t.RandomMin, t.RandomMax, t.AI, t.Provider, t.AITarget, t.Steps, t.Retry, t.Interval, t.Remark, t.Prompt, t.LastRun, t.LastResult, t.LastError)
-			if n := p.next[t.ID]; !t.Disabled && !n.IsZero() {
-				line += "\n下次: " + n.Format(time.RFC3339)
-			}
-			lines = append(lines, line)
-		}
-		if len(lines) == 0 {
-			return "暂无签到任务", nil
-		}
-		return strings.Join(lines, "\n\n"), nil
+		return p.taskPanel(), nil
 	case "add":
 		t, e := parseAdd(a)
 		if e != nil {
@@ -579,15 +590,7 @@ func (p *Plugin) command(ctx context.Context, a []string, event json.RawMessage)
 		return save()
 	case "aiconfig":
 		if len(a) == 0 || a[0] == "list" {
-			v := p.db.AI
-			v.OpenAIKey = masked(v.OpenAIKey)
-			v.GeminiKey = masked(v.GeminiKey)
-			v.Custom = append([]Provider(nil), v.Custom...)
-			for i := range v.Custom {
-				v.Custom[i].Key = masked(v.Custom[i].Key)
-			}
-			b, _ := json.MarshalIndent(v, "", "  ")
-			return string(b), nil
+			return p.aiPanel(), nil
 		}
 		c := &p.db.AI
 		switch a[0] {

@@ -2,7 +2,6 @@ package pmcaptcha
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	api "github.com/OrionG-hub/laowangbot/pkg/pluginapi"
@@ -12,25 +11,101 @@ import (
 	"time"
 )
 
-const Help = "PMCaptcha：pmc / pmcaptcha 同入口。默认关闭。\npmc on/off/status；pmc captcha on/off/math/text/img_digit/img_mixed\npmc h basic/captcha/set/wl/record 查看分节帮助。\npmc folders / fixfolder；pmc set folder <ID>\n启用插件后，陌生私聊默认归档并静音；captcha on 才发送验证码。"
+const Help = "PMCaptcha · 私聊验证（pmc / pmcaptcha 同入口）\n默认关闭；开启后陌生私聊归档并静音，验证码需另行开启。"
 
 func HelpText(prefix, section string) string {
 	sections := map[string]string{
-		"basic":   "pmc on/off：启停，保留验证码配置；关闭会取消待验证。\npmc status：完整配置和统计。\npmc folders：分组与自动规则；pmc fixfolder：清除通过分组联系人/非联系人自动规则。",
-		"captcha": "pmc captcha on/off\npmc captcha [mode] math/text/img_digit/img_mixed\nmath：四则/幂；text：默认随机问答，自定义 keyword 后回复关键词。\n图片为 5 位，兼容原版允许一个字符编辑距离；不在文本暴露答案。",
-		"set":     "pmc set time <秒> / tries <次数>：0 不限\npmc set keyword <文本> / prompt <文本>（空清除）\n提示占位符 {question}/{keyword}，按纯文本显示。\npmc set fail block/delete/report/mute/archive/none（支持屏蔽/删除/举报/静音/归档/无）\npmc set pass unmute/unarchive/wl/add_folder/none（支持取消静音/取消归档/白名单/加入分组/无）\n动作可空格多选，失败始终静音归档；delete 双方撤回。私聊不支持 kick/ban。\npmc set folder <ID>：0 不启用、1 归档、>=2 自定义\npmc set initiative on/off\npmc set initiative-failed on/off（默认 off）\npmc set history <N>：<=0 禁用\npmc set groups <N>：-1 禁用，0 全部满足\npmc set wl-words/bl-words <词…>/none\npmc set premium allow/ban/only/none\n规则顺序：主动会话；历史；共同群；白词优先于黑词；Premium。待验证永不因主动发消息通过。",
-		"wl":      "pmc wl / whitelist：列表\npmc add/del/pass <ID/@user>（支持回复）\npmc wl add/del/pass <ID/@user>（支持回复）\npmc wl del all；pmc wl cleanbots\npass 手动通过并加入白名单。del 同时删除通过记录。",
-		"record":  "pmc record [verified/failed]\npmc record del verified/failed <ID>/all\n列表不重复显示已在白名单/已通过用户；记录不包含验证码答案。",
+		"basic": `【启停与状态】
+.pmc on
+启用私聊验证。
+.pmc off
+停用并取消待验证，保留配置。
+.pmc status
+查看完整配置和统计。
+.pmc folders
+查看分组与自动规则。
+.pmc fixfolder
+清除通过分组的联系人／非联系人自动规则。`,
+		"captcha": `【验证码】
+.pmc captcha on
+开启验证码发送。
+.pmc captcha off
+关闭验证码发送。
+.pmc captcha math
+四则运算／幂。
+.pmc captcha text
+文字问答，自定义 keyword 后按关键词回答。
+.pmc captcha img_digit
+五位数字图片。
+.pmc captcha img_mixed
+五位混合图片；图片模式兼容一个字符编辑距离，不在文本暴露答案。`,
+		"set": `【规则设置】
+.pmc set time <秒>
+验证时限，0 不限。
+.pmc set tries <次数>
+尝试上限，0 不限。
+.pmc set keyword <文本>
+自定义答案；省略文本清除。
+.pmc set prompt <文本>
+自定义提示；支持 {question}/{keyword}，按纯文本显示。
+.pmc set fail block report
+失败动作示例；可选 block、delete、report、mute、archive、none，空格多选。delete 双方撤回；失败始终静音归档，不支持 kick/ban。
+.pmc set pass unmute unarchive wl
+通过动作示例；可选 unmute、unarchive、wl、add_folder、none，空格多选。
+.pmc set folder <ID>
+0 不启用、1 归档、>=2 自定义分组。
+.pmc set initiative on
+主动会话放行。
+.pmc set initiative off
+关闭主动会话放行。
+.pmc set initiative-failed on
+允许已失败联系人走主动会话规则。
+.pmc set initiative-failed off
+关闭该规则（默认）。
+.pmc set history <N>
+历史消息阈值，<=0 禁用。
+.pmc set groups <N>
+共同群阈值，-1 禁用，0 全部满足。
+.pmc set wl-words <词…>
+白词，空格分隔；none 清空。
+.pmc set bl-words <词…>
+黑词，空格分隔；none 清空。
+.pmc set premium allow
+Premium 放行；可将 allow 改为 ban、only 或 none。
+规则顺序：主动会话、历史、共同群、白词优先于黑词、Premium。待验证用户不因主动发消息通过。`,
+		"wl": `【白名单】
+.pmc wl
+查看白名单（别名 whitelist）。
+.pmc wl add <ID/@user>
+加入白名单，支持回复消息。
+.pmc wl del <ID/@user>
+删除白名单及通过记录，支持回复。
+.pmc wl pass <ID/@user>
+手动通过并加入白名单，支持回复。
+.pmc wl del all
+清空白名单。
+.pmc wl cleanbots
+清理白名单机器人。`,
+		"record": `【验证记录】
+.pmc record verified
+查看通过记录。
+.pmc record failed
+查看失败记录。
+.pmc record del verified <ID>
+删除指定通过记录；ID 可改为 all。
+.pmc record del failed <ID>
+删除指定失败记录；ID 可改为 all。
+列表不重复显示已在白名单／已通过的用户，记录不包含验证码答案。`,
 	}
 	if v, ok := sections[section]; ok {
-		return strings.ReplaceAll(v, "pmc ", prefix+"pmc ")
+		return strings.ReplaceAll(v, ".pmc ", prefix+"pmc ")
 	}
-	parts := []string{Help}
+	parts := []string{Help, "点击等宽命令复制完整一行；尖括号参数使用前替换。"}
 	for _, key := range []string{"basic", "captcha", "set", "wl", "record"} {
-		parts = append(parts, "【"+key+"】\n"+sections[key])
+		parts = append(parts, sections[key])
 	}
-	parts = append(parts, "示例：\npmc on\npmc captcha on\npmc captcha img_digit\npmc set pass unmute unarchive\npmc set fail block report\npmc set folder 2\npmc set pass unmute unarchive add_folder")
-	return strings.ReplaceAll(strings.Join(parts, "\n\n"), "pmc ", prefix+"pmc ")
+	parts = append(parts, "【分节帮助】\n.pmc h basic\n.pmc h captcha\n.pmc h set\n.pmc h wl\n.pmc h record")
+	return strings.ReplaceAll(strings.Join(parts, "\n\n"), ".pmc ", prefix+"pmc ")
 }
 func (p *Plugin) command(ctx context.Context, a []string, ev api.Event) (string, error) {
 	if len(a) == 0 {
@@ -87,8 +162,14 @@ func (p *Plugin) command(ctx context.Context, a []string, ev api.Event) (string,
 		if e != nil {
 			return "", e
 		}
-		b, _ := json.MarshalIndent(r.Folders, "", "  ")
-		return "Telegram 分组（ID 1 为系统归档）：\n" + string(b), nil
+		rows := []string{"【Telegram 分组】", "ID 1 为系统归档；以下命令设置验证通过后的分组。"}
+		for _, f := range r.Folders {
+			rows = append(rows, fmt.Sprintf("\n【%s · ID %d】\n联系人：%t；非联系人：%t\n群组：%t；频道：%t；机器人：%t\n排除静音：%t；排除归档：%t\n手动包含：%d；手动排除：%d", f.Title, f.ID, f.Contacts, f.NonContacts, f.Groups, f.Broadcasts, f.Bots, f.ExcludeMuted, f.ExcludeArchived, f.IncludeCount, f.ExcludeCount), fmt.Sprintf(".pmc set folder %d", f.ID))
+		}
+		if len(r.Folders) == 0 {
+			rows = append(rows, "暂无自定义分组")
+		}
+		return strings.Join(rows, "\n"), nil
 	case "fixfolder":
 		if p.config.Folder <= 1 {
 			return "", errors.New("请先 set folder 设置 >=2 的自定义分组")
@@ -237,11 +318,11 @@ func (p *Plugin) whitelist(ctx context.Context, a []string, ev api.Event) (strin
 		for _, id := range p.data.Whitelist {
 			u, e := p.info(ctx, id)
 			if e != nil {
-				rows = append(rows, idText(id)+"（信息读取失败）")
+				rows = append(rows, idText(id)+"（信息读取失败）\n.pmc wl del "+idText(id))
 				continue
 			}
 			if !u.Entity.Bot {
-				rows = append(rows, fmt.Sprintf("%s (%d)", u.Entity.Name, id))
+				rows = append(rows, fmt.Sprintf("%s (%d)\n移出白名单：\n.pmc wl del %d", u.Entity.Name, id, id))
 			}
 		}
 		return "白名单：\n" + strings.Join(rows, "\n"), nil
@@ -373,7 +454,7 @@ func (p *Plugin) records(ctx context.Context, a []string) (string, error) {
 			}
 			r.Name = u.Entity.Name
 		}
-		rows = append(rows, fmt.Sprintf("%s (%d) @%s %s %s", r.Name, r.ID, r.Username, r.Time, r.Reason))
+		rows = append(rows, fmt.Sprintf("%s (%d) @%s\n时间：%s\n原因：%s\n删除此记录：\n.pmc record del %s %d", r.Name, r.ID, r.Username, r.Time, r.Reason, kind, r.ID))
 	}
-	return kind + "：\n" + strings.Join(rows, "\n"), nil
+	return map[string]string{"verified": "通过记录", "failed": "失败记录"}[kind] + "：\n" + strings.Join(rows, "\n\n"), nil
 }

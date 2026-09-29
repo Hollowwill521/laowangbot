@@ -39,7 +39,7 @@ func (c *dmeConfig) normalize() {
 }
 func dmeHelp(prefix string) string {
 	p := command.Escape(prefix)
-	return "🗑️ <b>智能防撤回删除</b>\n默认先替换媒体，再双向删除；纯文本不编辑。\n\n<code>" + p + "dme 数量</code> 当前聊天最近 N 条自己的消息\n<code>" + p + "dme 999999</code> 当前聊天全部可找到的自己的消息\n回复 + <code>" + p + "dme</code> 自己的单条消息或整组图\n回复 + <code>" + p + "dme -r</code> 从回复位置到命令之前，仅自己的消息\n<code>" + p + "dme -a 数量</code> 或 <code>--all 数量</code> 显式全局最新 N 条，含归档（普通及归档各最多 500 会话，每会话 80 条）\n仅处理命令开始前的消息。转发、贴纸、网页预览及超过 48 小时的媒体不替换；替换失败仍尝试删除，并报告失败。"
+	return "🗑️ <b>智能防撤回删除</b>\n默认先替换媒体，再双向删除；纯文本不编辑。\n\n<code>" + p + "dme 数量</code> 当前聊天最近 N 条自己的消息\n<code>" + p + "dme 999999</code> 当前聊天全部可找到的自己的消息\n回复 + <code>" + p + "dme</code> 自己的单条消息或整组图\n回复 + <code>" + p + "dme -r</code> 从回复位置到命令之前，仅自己的消息\n<code>" + p + "dme -a 数量</code> 或 <code>" + p + "dme --all 数量</code> 显式全局最新 N 条，含归档（普通及归档各最多 500 会话，每会话 80 条）\n仅处理命令开始前的消息。转发、贴纸、网页预览及超过 48 小时的媒体不替换；替换失败仍尝试删除，并报告失败。"
 }
 
 type options struct {
