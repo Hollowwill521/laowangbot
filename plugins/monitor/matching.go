@@ -269,7 +269,11 @@ func (m *Monitor) origin(ctx context.Context, msg api.Message) map[string]string
 	return map[string]string{"text": "🔗 查看原消息", "url": u}
 }
 func (m *Monitor) event(ctx context.Context, e api.Event) error {
-	if time.Now().Unix()-int64(e.Date) > 60 {
+	received := e.ReceivedAt
+	if received == 0 {
+		received = time.Now().Unix()
+	}
+	if received-int64(e.Date) > 60 {
 		return nil
 	}
 	if strings.HasPrefix(e.Text, ".monitor sync ") {
@@ -297,9 +301,15 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 		return nil
 	}
 	msg := api.Message{ID: e.MessageID, ChatID: e.ChatID, SenderID: strconv.FormatInt(e.SenderID, 10), Text: e.Text, Date: e.Date, Out: e.Out}
-	r, err := m.call(ctx, api.Call{Method: "messages", Target: e.ChatID, IDs: []int{e.MessageID}})
-	if err == nil && len(r.Messages) > 0 {
-		msg = r.Messages[0]
+	var err error
+	if e.Message != nil {
+		msg = *e.Message
+	} else {
+		var r api.Result
+		r, err = m.call(ctx, api.Call{Method: "messages", Target: e.ChatID, IDs: []int{e.MessageID}})
+		if err == nil && len(r.Messages) > 0 {
+			msg = r.Messages[0]
+		}
 	}
 	if s.BotID != "" && msg.SenderID == s.BotID {
 		return nil

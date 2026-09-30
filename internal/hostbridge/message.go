@@ -8,6 +8,20 @@ import (
 	"unicode/utf16"
 )
 
+// MessageSnapshot copies details already present in a Telegram update, without RPCs.
+func MessageSnapshot(m *bot.Message) pluginapi.Message {
+	var value pluginapi.Message
+	if m.Raw != nil {
+		value = serialize(m.Raw)
+	}
+	value.ID = m.ID
+	value.ChatID = m.ChatID
+	value.SenderID = bot.PeerID(m.Sender)
+	value.Text = m.Text
+	value.Out = m.Out
+	return value
+}
+
 func serialize(m *tg.Message) pluginapi.Message {
 	r := pluginapi.Message{ID: m.ID, ChatID: bot.PeerID(m.PeerID), SenderID: bot.PeerID(m.FromID), Text: m.Message, Date: m.Date, Out: m.Out, Edited: m.EditDate != 0}
 	if reply, ok := m.ReplyTo.(*tg.MessageReplyHeader); ok {

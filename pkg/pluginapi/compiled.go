@@ -11,3 +11,7 @@ type Plugin interface {
 
 // Factory receives a lifetime context and the deployment's persistent state directory.
 type Factory func(context.Context, Host, string) (Plugin, error)
+
+// EventFilter returns an immutable, nonblocking predicate for admission.
+// The host obtains a fresh snapshot after each serialized plugin call.
+type EventFilter interface{ EventFilter() func(Event) bool }

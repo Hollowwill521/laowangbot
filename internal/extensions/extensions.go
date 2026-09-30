@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -141,12 +142,8 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 				payload := messageEvent(msg, c)
 				payload["self_id"] = strconv.FormatInt(c.SelfID(), 10)
 				raw, _ := json.Marshal(payload)
-				select {
-				case r.queue <- event{request: pluginapi.Request{Version: 1, Type: "event", Event: raw}, client: c, message: msg}:
-				default:
-					if a.Logger != nil {
-						a.Logger.Warn("plugin.event_dropped", "plugin", m.Name)
-					}
+				if err := r.enqueue(ctx, event{request: pluginapi.Request{Version: 1, Type: "event", Event: raw}, client: c, message: msg}); err != nil && a.Logger != nil {
+					a.Logger.Warn("plugin.event_enqueue_failed", "plugin", m.Name, "error", err)
 				}
 				return false
 			})
@@ -162,6 +159,7 @@ type event struct {
 	message *bot.Message
 }
 type runtime struct {
+	filter   atomic.Value // immutable func(pluginapi.Event) bool
 	factory  pluginapi.Factory
 	host     pluginapi.Host
 	root     string
@@ -237,7 +235,16 @@ func (r *runtime) call(ctx context.Context, q pluginapi.Request) (response plugi
 		}
 	}
 	// Invoke synchronously: cooperative timeout never detaches work or permits overlap.
+	started := time.Now()
 	response = r.instance.Handle(ctx, q)
+	if q.Type != "event" || r.filter.Load() == nil {
+		if f, ok := r.instance.(pluginapi.EventFilter); ok {
+			r.filter.Store(f.EventFilter())
+		}
+	}
+	if elapsed := time.Since(started); elapsed >= time.Second && r.logger != nil {
+		r.logger.Warn("plugin.request_slow", "plugin", r.manifest.Name, "type", q.Type, "took", elapsed, "queued", len(r.queue))
+	}
 	if err = ctx.Err(); err != nil {
 		return response, err
 	}
@@ -260,6 +267,37 @@ func (r *runtime) call(ctx context.Context, q pluginapi.Request) (response plugi
 	}
 	return response, nil
 }
+
+// Backpressure preserves admitted events rather than discarding them at capacity.
+func (r *runtime) enqueue(ctx context.Context, ev event) error {
+	if r.manifest.Name != "monitor" {
+		select {
+		case r.queue <- ev:
+			return nil
+		default:
+			if r.logger != nil {
+				r.logger.Warn("plugin.event_dropped", "plugin", r.manifest.Name)
+			}
+			return nil
+		}
+	}
+
+	if f := r.filter.Load(); f != nil {
+		var input pluginapi.Event
+		if json.Unmarshal(ev.request.Event, &input) == nil && !f.(func(pluginapi.Event) bool)(input) {
+			return nil
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.life.Done():
+		return r.life.Err()
+	case r.queue <- ev:
+		return nil
+	}
+}
+
 func (r *runtime) close() {
 	r.cancel()
 	r.gate <- struct{}{}
@@ -283,6 +321,7 @@ func (r *runtime) run(ctx context.Context, client *bot.Client) {
 		defer t.Stop()
 		ticks = t.C
 	}
+	burst := 0
 	for {
 		var ev event
 		select {
@@ -293,6 +332,18 @@ func (r *runtime) run(ctx context.Context, client *bot.Client) {
 		case ev = <-r.queue:
 		case <-ticks:
 			ev = event{request: pluginapi.Request{Version: 1, Type: "tick"}, client: client}
+			// Process a bounded burst before scheduled work; never starve ticks.
+			if r.manifest.Name == "monitor" && burst < 32 {
+				select {
+				case ev = <-r.queue:
+				default:
+				}
+			}
+		}
+		if ev.request.Type == "event" {
+			burst++
+		} else {
+			burst = 0
 		}
 		response, e := r.call(ctx, ev.request)
 		if e == nil {
@@ -320,7 +371,11 @@ func messageEvent(m *bot.Message, clients ...*bot.Client) map[string]any {
 		}
 	}
 	_, user := m.Sender.(*tg.PeerUser)
-	return map[string]any{"chat_type": string(m.ChatType), "channel_dm": channelDM, "type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
+	payload := map[string]any{"received_at": time.Now().Unix(), "chat_type": string(m.ChatType), "channel_dm": channelDM, "type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
+	if m.Raw != nil {
+		payload["message"] = hostbridge.MessageSnapshot(m)
+	}
+	return payload
 }
 func send(ctx context.Context, c *bot.Client, r pluginapi.Response) error {
 	for _, m := range r.Messages {
