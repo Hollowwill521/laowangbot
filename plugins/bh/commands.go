@@ -333,10 +333,14 @@ func (p *Plugin) command(ctx context.Context, a []string, ev api.Event) (string,
 		if ev.ChatID == "" || ev.MessageID == 0 {
 			return "", errors.New("缺少原命令消息，无法展示检查进度")
 		}
-		if e := p.progress(ctx, ev, fmt.Sprintf("正在检测 %d 个任务，请稍候…", len(ts))); e != nil {
+		start := "🚀 正在遍历所有 Bot 获取保号信息，请稍候..."
+		if len(a) == 1 {
+			start = fmt.Sprintf("🚀 正在获取任务 %s 的保号信息...", a[0])
+		}
+		if e := p.progress(ctx, ev, start); e != nil {
 			return "", fmt.Errorf("无法更新进度: %w", e)
 		}
-		return "", p.enqueue(ts, true, ev, time.Now())
+		return "", p.enqueue(ts, true, len(a) == 1, ev, time.Now())
 	default:
 		return "", fmt.Errorf("未知子命令 %s；使用 bh 查看帮助", sub)
 	}

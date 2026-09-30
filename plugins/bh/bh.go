@@ -51,6 +51,7 @@ type DB struct {
 }
 type batch struct {
 	manual      bool
+	single      bool
 	event       api.Event
 	total, done int
 	safe        int
@@ -176,7 +177,7 @@ func (p *Plugin) Handle(ctx context.Context, r api.Request) api.Response {
 	}
 	return api.Response{Version: 1, Text: text, HTML: panel}
 }
-func (p *Plugin) enqueue(tasks []Task, manual bool, ev api.Event, now time.Time) error {
+func (p *Plugin) enqueue(tasks []Task, manual, single bool, ev api.Event, now time.Time) error {
 	if len(tasks) == 0 {
 		return errors.New("没有可执行的任务")
 	}
@@ -185,7 +186,7 @@ func (p *Plugin) enqueue(tasks []Task, manual bool, ev api.Event, now time.Time)
 			return fmt.Errorf("任务 %s 正在执行或等待，未重复入队", t.ID)
 		}
 	}
-	b := &batch{manual: manual, event: ev, total: len(tasks), records: map[string]string{}}
+	b := &batch{manual: manual, single: single, event: ev, total: len(tasks), records: map[string]string{}}
 	for _, t := range tasks {
 		due := now
 		if !manual && t.Random {
@@ -208,7 +209,7 @@ func (p *Plugin) Tick(now time.Time) {
 					ts = append(ts, t)
 				}
 			}
-			_ = p.enqueue(ts, false, api.Event{}, now)
+			_ = p.enqueue(ts, false, false, api.Event{}, now)
 			s, e := parser.Parse(c)
 			if e == nil {
 				p.next[c] = s.Next(now)
@@ -300,8 +301,13 @@ func (p *Plugin) finish(j *job, r checkResult) {
 		b.safe++
 	}
 	b.alert = b.alert || alert
-	report := fmt.Sprintf("保号检测报告（%d/%d）\n%s\n\n%s", b.done, b.total, time.Now().Format("2006/01/02 15:04:05"), strings.Join(b.lines, "\n")+fmt.Sprintf("\n安全账号: %d 个（已隐藏）", b.safe))
 	done := b.done == b.total
+	var report string
+	if done {
+		report = reportText(b.single, b.lines, b.safe, time.Now())
+	} else {
+		report = progressText(b)
+	}
 	notify := p.db.Notify
 	p.mu.Unlock()
 	if done && (b.manual || b.alert) {
