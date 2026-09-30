@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+// callbackFreshMS is how long a "一键参加" action stays executable. Polling is
+// paused outside this window, so a press can reach the bot long after it happened.
+const callbackFreshMS = 10 * 60 * 1000
+
 type Callback struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
@@ -104,7 +108,7 @@ func (m *Monitor) callback(ctx context.Context, cb Callback) error {
 	}
 	if cb.From.ID.String() != m.owner {
 		alert = "❌ 权限拒绝：这是机主专属按钮！"
-	} else if a, ok := m.state.Pending[strings.TrimPrefix(cb.Data, "send_")]; ok {
+	} else if a, ok := m.state.Pending[strings.TrimPrefix(cb.Data, "send_")]; ok && time.Now().UnixMilli()-a.Time <= callbackFreshMS {
 		if cb.Message == nil || cb.Message.Chat.ID == "" {
 			alert = "❌ 无法获取群组信息。"
 		} else {

@@ -50,6 +50,7 @@ type Job struct {
 	Due      int64           `json:"due"`
 	Kind     string          `json:"kind"`
 	Target   string          `json:"target"`
+	Source   string          `json:"source,omitempty"`
 	Fallback string          `json:"fallback,omitempty"`
 	Text     string          `json:"text,omitempty"`
 	Report   string          `json:"report,omitempty"`
@@ -58,14 +59,22 @@ type Job struct {
 	Attempt  int             `json:"attempt,omitempty"`
 	Payload  json.RawMessage `json:"payload,omitempty"`
 }
+
+// ChatMark is how far the plugin has seen a chat advance, by message ID and by
+// date, so a restart's replay can be told apart from a late-but-new message.
+type ChatMark struct {
+	Msg  int   `json:"msg"`
+	Date int64 `json:"date"`
+}
 type State struct {
-	Settings     Settings          `json:"monitor_settings"`
-	Pending      map[string]Action `json:"-"`
-	PendingPairs []json.RawMessage `json:"monitor_pending_actions"`
-	Dedup        map[string]int64  `json:"monitor_dedup"`
-	Jobs         []Job             `json:"monitor_jobs,omitempty"`
-	Suppress     map[string]int64  `json:"monitor_sync_suppressions,omitempty"`
-	UpdateID     int64             `json:"monitor_update_id,omitempty"`
+	Settings     Settings            `json:"monitor_settings"`
+	Pending      map[string]Action   `json:"-"`
+	PendingPairs []json.RawMessage   `json:"monitor_pending_actions"`
+	Dedup        map[string]int64    `json:"monitor_dedup"`
+	Jobs         []Job               `json:"monitor_jobs,omitempty"`
+	Suppress     map[string]int64    `json:"monitor_sync_suppressions,omitempty"`
+	Watermarks   map[string]ChatMark `json:"monitor_chat_watermarks,omitempty"`
+	UpdateID     int64               `json:"monitor_update_id,omitempty"`
 }
 type Monitor struct {
 	mu          sync.Mutex
@@ -77,10 +86,12 @@ type Monitor struct {
 	nextPoll    int64
 	conflicts   int
 	lastCleanup int64
+	lookups     map[string]lookup
+	inlineLeft  int
 }
 
 func New(h api.Host, path string) (*Monitor, error) {
-	m := &Monitor{host: h, path: path, botBase: "https://api.telegram.org"}
+	m := &Monitor{host: h, path: path, botBase: "https://api.telegram.org", inlineLeft: inlineAlertBudget}
 	m.state.Settings = Settings{IsGlobalEnabled: true, EnableDedup: true, MonitorAdminsMessages: true}
 	b, e := os.ReadFile(path)
 	if e == nil {
@@ -567,17 +578,86 @@ func (m *Monitor) cleanup(now int64) {
 	}
 	m.lastCleanup = now
 }
+
+// awaitingCallback reports whether any action could still be executed. Each
+// poll costs a round trip inside the plugin's only caller every tick, and
+// outside the freshness window its answer can only ever be "already executed".
+func (m *Monitor) awaitingCallback(now int64) bool {
+	for _, a := range m.state.Pending {
+		if now-a.Time <= callbackFreshMS {
+			return true
+		}
+	}
+	return false
+}
+
+// deliver sends one queued alert to its target group: the Bot API when a token
+// is configured, otherwise the user session, then the original message by
+// forward with a text fallback. Network failures re-queue the whole alert.
+func (m *Monitor) deliver(ctx context.Context, j Job) error {
+	var errs []error
+	if len(j.Payload) > 0 {
+		if _, err := m.bot(ctx, "sendMessage", j.Payload); err != nil {
+			if strings.Contains(err.Error(), "network failure") && j.Attempt < 3 {
+				j.Attempt++
+				j.Due = time.Now().UnixMilli() + 500
+				m.state.Jobs = append(m.state.Jobs, j)
+				return nil
+			}
+			errs = append(errs, err)
+		}
+	} else if _, err := m.call(ctx, api.Call{Method: "send", Target: j.Target, Text: j.Text, HTML: true}); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := m.call(ctx, api.Call{Method: "forward", Target: j.Target, User: j.Source, IDs: j.IDs}); err != nil {
+		fallback := j.Fallback
+		if fallback == "" {
+			fallback = "[多媒体消息]"
+		}
+		for _, part := range escapedChunks(fallback, 3000) {
+			if _, err = m.call(ctx, api.Call{Method: "send", Target: j.Target, Text: "⚠️ <b>无法转发原消息</b>\n\n" + part, HTML: true}); err != nil {
+				errs = append(errs, err)
+				break
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// tickJobBudget bounds how long one tick may spend delivering, so a burst of
+// alerts across many target groups cannot delay commands behind the same gate.
+// inlineAlertBudget is how many alerts one tick window may deliver without
+// deferring to the queue; normal traffic never reaches it.
+const inlineAlertBudget = 5
+
+const tickJobBudget = 2 * time.Second
+
 func (m *Monitor) tick(ctx context.Context) error {
 	now := time.Now().UnixMilli()
+	started := time.Now()
+	m.inlineLeft = inlineAlertBudget
 	var errs []error
 	if now-m.lastCleanup >= 600000 {
 		m.cleanup(now)
 	}
 	jobs := m.state.Jobs
 	m.state.Jobs = nil
-	for _, j := range jobs {
+	for i, j := range jobs {
 		if j.Due > now {
 			m.state.Jobs = append(m.state.Jobs, j)
+			continue
+		}
+		if ctx.Err() != nil || time.Since(started) >= tickJobBudget {
+			// A restart must not consume queued alerts, and a burst must not hold
+			// the plugin's only caller for minutes: either way the remainder waits
+			// for a later tick instead of being lost.
+			m.state.Jobs = append(m.state.Jobs, jobs[i:]...)
+			break
+		}
+		if j.Kind == "notify" {
+			if err := m.deliver(ctx, j); err != nil {
+				errs = append(errs, err)
+			}
 			continue
 		}
 		if j.Kind == "bot_retry" {
@@ -639,7 +719,7 @@ func (m *Monitor) tick(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	if m.state.Settings.BotToken != "" && now >= m.nextPoll {
+	if m.state.Settings.BotToken != "" && now >= m.nextPoll && m.awaitingCallback(now) {
 		if err := m.poll(ctx); err != nil {
 			errs = append(errs, err)
 		}

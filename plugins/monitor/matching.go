@@ -235,7 +235,7 @@ func (m *Monitor) extract(ctx context.Context, msg api.Message, text, matched st
 		if lower == "share" || lower == "c" || strings.HasSuffix(lower, "bot") {
 			continue
 		}
-		r, e := m.call(ctx, api.Call{Method: "resolve", Target: name})
+		r, e := m.peer(ctx, name)
 		if e != nil {
 			return name, kw
 		}
@@ -246,7 +246,7 @@ func (m *Monitor) extract(ctx context.Context, msg api.Message, text, matched st
 	return msg.ChatID, kw
 }
 func (m *Monitor) origin(ctx context.Context, msg api.Message) map[string]string {
-	r, _ := m.call(ctx, api.Call{Method: "resolve", Target: msg.ChatID})
+	r, _ := m.peer(ctx, msg.ChatID)
 	if !strings.HasPrefix(msg.ChatID, "-") {
 		if r.Entity == nil || r.Entity.Username == "" {
 			return nil
@@ -268,8 +268,15 @@ func (m *Monitor) origin(ctx context.Context, msg api.Message) map[string]string
 	}
 	return map[string]string{"text": "🔗 查看原消息", "url": u}
 }
+
+// alertMaxAge bounds how old a message may be and still earn an alert. It is
+// deliberately far above Telegram's worst observed delivery delay: the old 60s
+// gate silently discarded exactly the late channel posts this plugin exists to
+// catch. Anything older than this is a replay after a long outage.
+const alertMaxAge = 15 * time.Minute
+
 func (m *Monitor) event(ctx context.Context, e api.Event) error {
-	if time.Now().Unix()-int64(e.Date) > 60 {
+	if e.Date <= 0 || time.Since(time.Unix(int64(e.Date), 0)) > alertMaxAge {
 		return nil
 	}
 	if strings.HasPrefix(e.Text, ".monitor sync ") {
@@ -296,11 +303,12 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 	if !allowed {
 		return nil
 	}
-	msg := api.Message{ID: e.MessageID, ChatID: e.ChatID, SenderID: strconv.FormatInt(e.SenderID, 10), Text: e.Text, Date: e.Date, Out: e.Out}
-	r, err := m.call(ctx, api.Call{Method: "messages", Target: e.ChatID, IDs: []int{e.MessageID}})
-	if err == nil && len(r.Messages) > 0 {
-		msg = r.Messages[0]
+	// Late updates are normal for channels, so age alone cannot decide; only a
+	// message that is not newer than this chat's watermark is a replay.
+	if m.alreadySeen(e.ChatID, e.MessageID, int64(e.Date)) {
+		return nil
 	}
+	msg := m.eventMessage(ctx, e)
 	if s.BotID != "" && msg.SenderID == s.BotID {
 		return nil
 	}
@@ -328,13 +336,9 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 		matched = "👤 指定人发言"
 	}
 	if !specific && !(s.MonitorAdminsMessages && s.MonitorUsersMessages && !s.IgnoreBotMessages) {
-		identity := "owner"
-		if !msg.Out {
-			r, er := m.call(ctx, api.Call{Method: "identity", Target: msg.ChatID, User: msg.SenderID})
-			if er != nil {
-				return er
-			}
-			identity = r.Identity
+		identity, err := m.identity(ctx, msg)
+		if err != nil {
+			return err
 		}
 		if identity != "owner" && !(identity == "bot" && !s.IgnoreBotMessages) && !(identity == "admin" && s.MonitorAdminsMessages) && !(identity == "user" && s.MonitorUsersMessages) {
 			return nil
@@ -359,14 +363,14 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 	keyboard := [][]map[string]string{}
 	tip := "🚨 <b>关键词提醒</b> [<code>" + html.EscapeString(shortText(matched, 256)) + "</code>]"
 	if kw != "" {
-		id := strconv.FormatInt(time.Now().UnixNano(), 36)
-		m.state.Pending[id] = Action{TargetChatID: target, Keyword: kw, SourceChatID: msg.ChatID, Time: time.Now().UnixMilli()}
-		keyboard = append(keyboard, []map[string]string{{"text": "🚀 一键参加 (自动触发集群全员跟随)", "callback_data": "send_" + id}})
-		command := html.EscapeString(".monitor sync " + target + " " + msg.ChatID + " " + kw)
+		// The one-tap join button is gone on purpose: its callback only reaches us
+		// through per-second Bot API polling, which held the plugin's single caller
+		// for seconds at a time. Copying this command does the same thing.
+		command := ".monitor sync " + target + " " + msg.ChatID + " " + kw
 		if len(command) < 2000 {
-			tip += "\n\n🛡️ <b>群友代发指令 (点击复制):</b>\n<code>" + command + "</code>"
+			tip += "\n\n🛡️ <b>群友代发指令 (点击复制):</b>\n<code>" + html.EscapeString(command) + "</code>"
 		} else {
-			tip += "\n代发指令过长，请使用参加按钮。"
+			tip += "\n\n🛡️ 代发指令过长，已省略。"
 		}
 	}
 	if origin := m.origin(ctx, msg); origin != nil {
@@ -375,42 +379,116 @@ func (m *Monitor) event(ctx context.Context, e api.Event) error {
 	if matched == "👤 指定人发言" {
 		tip = "🚨 <b>指定监控人发言</b>"
 	}
-	if err = m.save(); err != nil {
-		return err
-	}
-	var notificationErrors []error
+	// Delivery is queued rather than inline: one slow Bot API answer must not
+	// hold the plugin's only caller while new messages overflow the host queue.
+	// The same tick that flushes these jobs persists dedup and pending state.
+	now := time.Now().UnixMilli()
+	var errs []error
 	for _, t := range s.TargetGroups {
+		j := Job{Kind: "notify", Due: now, Target: t.ID, Source: msg.ChatID, IDs: []int{msg.ID}, Text: tip, Fallback: text}
 		if s.BotToken != "" {
-			payload := map[string]any{"chat_id": t.ID, "text": tip, "parse_mode": "HTML", "disable_web_page_preview": true, "reply_markup": map[string]any{"inline_keyboard": keyboard}}
-			if _, err := m.bot(ctx, "sendMessage", payload); err != nil {
-				notificationErrors = append(notificationErrors, err)
-				if strings.Contains(err.Error(), "network failure") {
-					b, _ := json.Marshal(payload)
-					m.state.Jobs = append(m.state.Jobs, Job{Kind: "bot_retry", Due: time.Now().Add(500 * time.Millisecond).UnixMilli(), Payload: b, Attempt: 1})
-					if err = m.save(); err != nil {
-						return err
-					}
-				}
+			payload, err := json.Marshal(map[string]any{"chat_id": t.ID, "text": tip, "parse_mode": "HTML", "disable_web_page_preview": true, "reply_markup": map[string]any{"inline_keyboard": keyboard}})
+			if err != nil {
+				return err
 			}
-		} else {
-			if _, err := m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: tip, HTML: true}); err != nil {
-				notificationErrors = append(notificationErrors, err)
-			}
+			j.Payload = payload
 		}
-		if _, err = m.call(ctx, api.Call{Method: "forward", Target: t.ID, User: msg.ChatID, IDs: []int{msg.ID}}); err != nil {
-			fallback := text
-			if fallback == "" {
-				fallback = "[多媒体消息]"
+		if m.inlineLeft > 0 {
+			// Ordinary alerts are delivered inline: waiting for the next tick would
+			// add latency to every one of them. Only once this tick's budget is gone
+			// does a burst fall back to the queue, which keeps the caller bounded.
+			m.inlineLeft--
+			if err := m.deliver(ctx, j); err != nil {
+				errs = append(errs, err)
 			}
-			for _, part := range escapedChunks(fallback, 3000) {
-				if _, err = m.call(ctx, api.Call{Method: "send", Target: t.ID, Text: "⚠️ <b>无法转发原消息</b>\n\n" + part, HTML: true}); err != nil {
-					notificationErrors = append(notificationErrors, err)
-					break
-				}
-			}
+			continue
 		}
+		m.state.Jobs = append(m.state.Jobs, j)
 	}
-	return errors.Join(notificationErrors...)
+	return errors.Join(errs...)
+}
+
+// alreadySeen rejects a chat's replayed updates without dropping same-second
+// siblings: IDs advance within a chat even when dates are equal, so a date-only
+// watermark would silently discard real messages.
+func (m *Monitor) alreadySeen(chat string, msgID int, date int64) bool {
+	w := m.state.Watermarks[chat]
+	if msgID <= w.Msg && date <= w.Date {
+		return true
+	}
+	if m.state.Watermarks == nil {
+		m.state.Watermarks = map[string]ChatMark{}
+	}
+	if len(m.state.Watermarks) >= 4096 {
+		m.state.Watermarks = map[string]ChatMark{}
+	}
+	m.state.Watermarks[chat] = ChatMark{Msg: max(w.Msg, msgID), Date: max(w.Date, date)}
+	return false
+}
+
+// eventMessage prefers the message the host already serialized into the event;
+// the "messages" round trip only runs for hosts that send a bare event.
+func (m *Monitor) eventMessage(ctx context.Context, e api.Event) api.Message {
+	msg := api.Message{ID: e.MessageID, ChatID: e.ChatID, SenderID: strconv.FormatInt(e.SenderID, 10), Text: e.Text, Date: e.Date, Out: e.Out}
+	if e.Message != nil && e.Message.ID == e.MessageID {
+		return *e.Message
+	}
+	r, err := m.call(ctx, api.Call{Method: "messages", Target: e.ChatID, IDs: []int{e.MessageID}})
+	if err == nil && len(r.Messages) > 0 {
+		msg = r.Messages[0]
+	}
+	return msg
+}
+
+// lookupTTL is short enough that a renamed group or a promoted member only costs
+// a stale link or one missed alert for a few minutes.
+const lookupTTL = 10 * time.Minute
+
+type lookup struct {
+	text   string
+	result api.Result
+	until  time.Time
+}
+
+func (m *Monitor) remember(key, text string, result api.Result) {
+	if m.lookups == nil {
+		m.lookups = map[string]lookup{}
+	}
+	if len(m.lookups) >= 4096 {
+		m.lookups = map[string]lookup{}
+	}
+	m.lookups[key] = lookup{text: text, result: result, until: time.Now().Add(lookupTTL)}
+}
+
+// identity caches the sender lookup that every alert used to pay for.
+func (m *Monitor) identity(ctx context.Context, msg api.Message) (string, error) {
+	if msg.Out {
+		return "owner", nil
+	}
+	key := "id:" + msg.ChatID + "|" + msg.SenderID
+	if v, ok := m.lookups[key]; ok && time.Now().Before(v.until) {
+		return v.text, nil
+	}
+	r, err := m.call(ctx, api.Call{Method: "identity", Target: msg.ChatID, User: msg.SenderID})
+	if err != nil {
+		return "", err
+	}
+	m.remember(key, r.Identity, api.Result{})
+	return r.Identity, nil
+}
+
+// peer caches entity lookups used for origin links and target-group checks.
+func (m *Monitor) peer(ctx context.Context, target string) (api.Result, error) {
+	key := "peer:" + target
+	if v, ok := m.lookups[key]; ok && time.Now().Before(v.until) {
+		return v.result, nil
+	}
+	r, err := m.call(ctx, api.Call{Method: "resolve", Target: target})
+	if err != nil {
+		return r, err
+	}
+	m.remember(key, "", r)
+	return r, nil
 }
 func (m *Monitor) dumpSample(msg api.Message, text string) {
 	path := filepath.Join(filepath.Dir(m.path), "lottery-samples.jsonl")
