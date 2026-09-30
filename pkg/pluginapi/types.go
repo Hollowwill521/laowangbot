@@ -47,20 +47,21 @@ type Message struct {
 	ForwardDate      int      `json:"forward_date,omitempty"`
 }
 type Event struct {
-	ChatType     string `json:"chat_type"`
-	ChannelDM    bool   `json:"channel_dm"`
-	SenderIsUser bool   `json:"sender_is_user"`
-	SenderPeerID string `json:"sender_peer_id"`
-	Type         string `json:"type"`
-	ChatID       string `json:"chat_id"`
-	MessageID    int    `json:"message_id"`
-	SenderID     int64  `json:"sender_id"`
-	Text         string `json:"text"`
-	Edited       bool   `json:"edited"`
-	ReplyToID    int    `json:"reply_to_id"`
-	Out          bool   `json:"out"`
-	Date         int    `json:"date"`
-	SelfID       string `json:"self_id"`
+	ChatType     string   `json:"chat_type"`
+	ChannelDM    bool     `json:"channel_dm"`
+	SenderIsUser bool     `json:"sender_is_user"`
+	SenderPeerID string   `json:"sender_peer_id"`
+	Type         string   `json:"type"`
+	ChatID       string   `json:"chat_id"`
+	MessageID    int      `json:"message_id"`
+	SenderID     int64    `json:"sender_id"`
+	Text         string   `json:"text"`
+	Edited       bool     `json:"edited"`
+	ReplyToID    int      `json:"reply_to_id"`
+	Out          bool     `json:"out"`
+	Date         int      `json:"date"`
+	SelfID       string   `json:"self_id"`
+	Message      *Message `json:"message,omitempty"`
 }
 type Request struct {
 	Version int             `json:"version"`

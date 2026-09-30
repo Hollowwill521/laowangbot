@@ -62,3 +62,7 @@ func serializeFor(b *bot.Client, m *tg.Message) pluginapi.Message {
 	}
 	return r
 }
+
+// SerializeFor is the exact value the "messages" call would return for m, so an
+// event can carry it and spare the plugin a round trip.
+func SerializeFor(b *bot.Client, m *tg.Message) pluginapi.Message { return serializeFor(b, m) }

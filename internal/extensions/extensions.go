@@ -20,10 +20,15 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
 var commandName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
+// eventQueueSize bounds one plugin's pending events; a full queue drops the
+// newest event rather than stalling the update loop for every plugin.
+const eventQueueSize = 64
 
 // Register validates the complete namespace before registering any plugin.
 // Installing or replacing a plugin takes effect after restart.
@@ -85,7 +90,7 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 		m := entry.Manifest
 		host, _ := hostbridge.Direct(a.Bot, m.Capabilities)
 		life, cancel := context.WithCancel(context.Background())
-		r := &runtime{factory: entry.New, host: host, root: a.Root, manifest: m, logger: a.Logger, queue: make(chan event, 64), gate: make(chan struct{}, 1), life: life, cancel: cancel}
+		r := &runtime{factory: entry.New, host: host, root: a.Root, manifest: m, logger: a.Logger, queue: make(chan event, eventQueueSize), gate: make(chan struct{}, 1), life: life, cancel: cancel}
 		a.OnClose(r.close)
 		for _, n := range m.Commands {
 			a.Registry.Register(&command.Command{Name: n, Description: "插件 " + m.Name, Handle: func(ctx context.Context, inv *command.Invocation) error {
@@ -142,11 +147,9 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 				payload["self_id"] = strconv.FormatInt(c.SelfID(), 10)
 				raw, _ := json.Marshal(payload)
 				select {
-				case r.queue <- event{request: pluginapi.Request{Version: 1, Type: "event", Event: raw}, client: c, message: msg}:
+				case r.queue <- event{request: pluginapi.Request{Version: 1, Type: "event", Event: raw}, client: c, message: msg, queuedAt: time.Now()}:
 				default:
-					if a.Logger != nil {
-						a.Logger.Warn("plugin.event_dropped", "plugin", m.Name)
-					}
+					r.dropped.Add(1)
 				}
 				return false
 			})
@@ -157,21 +160,32 @@ func registerEntries(a *app.App, entries []compiled.Entry) error {
 }
 
 type event struct {
-	request pluginapi.Request
-	client  *bot.Client
-	message *bot.Message
+	request  pluginapi.Request
+	client   *bot.Client
+	message  *bot.Message
+	queuedAt time.Time
 }
 type runtime struct {
-	factory  pluginapi.Factory
-	host     pluginapi.Host
-	root     string
-	manifest plugin.Manifest
-	logger   *slog.Logger
-	queue    chan event
-	gate     chan struct{}
-	instance pluginapi.Plugin
-	life     context.Context
-	cancel   context.CancelFunc
+	factory      pluginapi.Factory
+	host         pluginapi.Host
+	root         string
+	manifest     plugin.Manifest
+	logger       *slog.Logger
+	queue        chan event
+	dropped      atomic.Int64
+	late         atomic.Int64
+	seen         atomic.Int64
+	slow         atomic.Int64
+	slowMax      atomic.Int64
+	waitMax      atomic.Int64
+	callMax      atomic.Int64
+	propMax      atomic.Int64
+	reported     time.Time
+	reportedSlow time.Time
+	gate         chan struct{}
+	instance     pluginapi.Plugin
+	life         context.Context
+	cancel       context.CancelFunc
 }
 
 func stateDirectory(root, name string) (string, error) {
@@ -260,6 +274,79 @@ func (r *runtime) call(ctx context.Context, q pluginapi.Request) (response plugi
 	}
 	return response, nil
 }
+
+// eventLateAfter mirrors the freshness gate plugins apply to queued messages: an
+// event older than this is about to be ignored by them, and that loss is
+// otherwise invisible because it happens after a successful dequeue.
+const eventLateAfter = 60
+
+// eventSlowAfter is the age at which an event is considered late to arrive
+// rather than merely old; it separates Telegram-side propagation from our own
+// queue backlog.
+const eventSlowAfter = 3
+
+// markLate counts events that reached the plugin too late to be acted on, and
+// separately tracks how old events were when they finally got dequeued.
+func (r *runtime) markLate(ev event) {
+	if ev.message == nil {
+		return
+	}
+	d := messageDate(ev.message)
+	if d <= 0 {
+		return
+	}
+	r.seen.Add(1)
+	age := time.Now().Unix() - int64(d)
+	if age > eventLateAfter {
+		r.late.Add(1)
+	}
+	if age <= eventSlowAfter {
+		return
+	}
+	r.slow.Add(1)
+	peak(&r.slowMax, int64(age))
+	// Split the age into "Telegram had not delivered it yet" and "it sat in our
+	// own queue": the two have opposite fixes, so a single number is useless.
+	if !ev.queuedAt.IsZero() {
+		wait := int64(time.Since(ev.queuedAt).Seconds())
+		peak(&r.waitMax, wait)
+		peak(&r.propMax, int64(age)-wait)
+	}
+}
+
+// peak records the largest observed value without a lock.
+func peak(target *atomic.Int64, v int64) {
+	for {
+		cur := target.Load()
+		if v <= cur || target.CompareAndSwap(cur, v) {
+			return
+		}
+	}
+}
+
+// reportSlow samples how long events wait before the plugin sees them. It is
+// rate-limited far more coarsely than the loss summary so a channel that is
+// simply slow to push does not generate a line every minute.
+func (r *runtime) reportSlow() {
+	n := r.slow.Load()
+	if n == 0 || r.logger == nil || time.Since(r.reportedSlow) < 10*time.Minute {
+		return
+	}
+	r.reportedSlow = time.Now()
+	r.logger.Warn("plugin.event_slow", "plugin", r.manifest.Name, "slow", r.slow.Swap(0), "seen", r.seen.Swap(0), "max_age_s", r.slowMax.Swap(0), "max_queue_s", r.waitMax.Swap(0), "max_source_s", r.propMax.Swap(0), "max_call_ms", r.callMax.Swap(0))
+}
+
+// reportDropped turns silent loss into one line per minute: the per-message
+// warning it replaces could bury the log at thousands of lines an hour.
+func (r *runtime) reportDropped() {
+	dropped, late := r.dropped.Load(), r.late.Load()
+	if (dropped == 0 && late == 0) || r.logger == nil || time.Since(r.reported) < time.Minute {
+		return
+	}
+	r.reported = time.Now()
+	r.logger.Warn("plugin.events_dropped", "plugin", r.manifest.Name, "count", r.dropped.Swap(0), "late", r.late.Swap(0), "queue", cap(r.queue))
+}
+
 func (r *runtime) close() {
 	r.cancel()
 	r.gate <- struct{}{}
@@ -294,7 +381,12 @@ func (r *runtime) run(ctx context.Context, client *bot.Client) {
 		case <-ticks:
 			ev = event{request: pluginapi.Request{Version: 1, Type: "tick"}, client: client}
 		}
+		r.markLate(ev)
+		r.reportDropped()
+		r.reportSlow()
+		called := time.Now()
 		response, e := r.call(ctx, ev.request)
+		peak(&r.callMax, time.Since(called).Milliseconds())
 		if e == nil {
 			e = sendFor(ctx, ev.client, response, r.manifest)
 		}
@@ -320,7 +412,11 @@ func messageEvent(m *bot.Message, clients ...*bot.Client) map[string]any {
 		}
 	}
 	_, user := m.Sender.(*tg.PeerUser)
-	return map[string]any{"chat_type": string(m.ChatType), "channel_dm": channelDM, "type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
+	payload := map[string]any{"chat_type": string(m.ChatType), "channel_dm": channelDM, "type": "message", "chat_id": m.ChatID, "message_id": m.ID, "sender_id": m.SenderID(), "sender_is_user": user, "sender_peer_id": bot.PeerID(m.Sender), "text": m.Text, "edited": m.Edited, "reply_to_id": m.ReplyToID, "out": m.Out, "date": messageDate(m)}
+	if m.Raw != nil && len(clients) > 0 && clients[0] != nil {
+		payload["message"] = hostbridge.SerializeFor(clients[0], m.Raw)
+	}
+	return payload
 }
 func send(ctx context.Context, c *bot.Client, r pluginapi.Response) error {
 	for _, m := range r.Messages {
