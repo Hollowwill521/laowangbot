@@ -23,6 +23,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/privacy"
 	"github.com/OrionG-hub/laowangbot/internal/commands/rate"
 	"github.com/OrionG-hub/laowangbot/internal/commands/re"
+	"github.com/OrionG-hub/laowangbot/internal/commands/react"
 	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
 	"github.com/OrionG-hub/laowangbot/internal/commands/save"
 	"github.com/OrionG-hub/laowangbot/internal/commands/speedtest"
@@ -44,6 +45,7 @@ func RegisterAll(a *app.App) {
 	update.Register(a)
 	calc.Register(a)
 	rate.Register(a)
+	react.Register(a)
 	whois.Register(a)
 	webdav.Register(a)
 	ai.Register(a)
