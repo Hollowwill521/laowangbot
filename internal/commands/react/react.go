@@ -230,6 +230,7 @@ func (s *service) apply(ctx context.Context, client *bot.Client, current task) {
 		return
 	}
 	s.reacted.Add(1)
+	s.mutes.resetFailures(current.chatID)
 	client.Logger().Info("react.done", slog.String("chat", current.chatID), slog.Int("message", current.msgID),
 		slog.String("emoji", current.emoji), slog.String("keyword", current.keyword), slog.Bool("big", current.big))
 }
@@ -282,6 +283,21 @@ func (s *service) cooldown(kind failureKind, chatID string, now time.Time) {
 	}
 }
 
+// backoff 处理"知道被拒绝了，但不知道为什么"的两类错误：表情被拒（REACTION_INVALID
+// 既可能是配置写错，也可能是那个群把反应开关关了）和没列进白名单的新码。攒够连续三次
+// 就把这个群歇一小时，返回是不是刚刚歇上。
+//
+// 连接抖动（failureTransport）和单条消息层面的失败（failureIgnored）不计数：前者是
+// 我们自己的线路问题，后者每条评论各不相干，谁都不该让一个群背上黑名单。
+func (s *service) backoff(kind failureKind, chatID string, now time.Time) bool {
+	switch kind {
+	case failureEmoji, failureOther:
+		return s.mutes.noteFailure(chatID, now)
+	default:
+		return false
+	}
+}
+
 // failed 按分类记下这一次失败，并在该冷却的时候冷却这个群。
 func (s *service) failed(client *bot.Client, current task, err error, now time.Time) {
 	label := err.Error()
@@ -290,6 +306,7 @@ func (s *service) failed(client *bot.Client, current task, err error, now time.T
 	}
 	kind := classify(err)
 	s.cooldown(kind, current.chatID, now)
+	tripped := s.backoff(kind, current.chatID, now)
 	fields := []any{
 		slog.String("chat", current.chatID),
 		slog.Int("message", current.msgID),
@@ -307,5 +324,9 @@ func (s *service) failed(client *bot.Client, current task, err error, now time.T
 		client.Logger().Warn("react.flood", fields...)
 	default:
 		client.Logger().Warn("react.failed", fields...)
+	}
+	if tripped {
+		client.Logger().Warn("react.chat_backoff", append(fields,
+			slog.Int("streak", failureTrip), slog.Duration("cooldown", failureBackoff))...)
 	}
 }
