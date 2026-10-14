@@ -69,7 +69,7 @@ func systemctl() string {
 
 // Register 注册 .restart 和处理回执的钩子。
 func Register(a *app.App) {
-	r := &restarter{a: a, service: a.Env.Get("MIBOT_SERVICE", "laowangbot.service"),
+	r := &restarter{a: a, service: a.Env.Get("LAOWANGBOT_SERVICE", "laowangbot.service"),
 		store: store.New(filepath.Join(a.Root, "restart-receipt.json"), func() receiptDocument { return receiptDocument{} })}
 	service = r
 	a.Registry.Register(&command.Command{Name: "restart", Description: "重启 laowangbot 服务", Handle: func(ctx context.Context, inv *command.Invocation) error {

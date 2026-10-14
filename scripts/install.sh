@@ -263,7 +263,7 @@ for source_unit in "${SOURCE_SERVICES[@]+"${SOURCE_SERVICES[@]}"}"; do
   source_active=$(systemctl show "$source_unit" -p ActiveState --value) || die '无法确认旧服务已停止'
   [ "$source_active" = inactive ] || die '旧服务未完全停止，拒绝迁移'
   if [ "${SOURCE_ENABLE_STATES[$index]}" != masked ]; then
-    SOURCE_DISABLE_ATTEMPTED[$index]=1
+    SOURCE_DISABLE_ATTEMPTED[index]=1
     systemctl disable "$source_unit"
     if [ "${SOURCE_ENABLE_STATES[$index]}" = enabled-runtime ]; then systemctl disable --runtime "$source_unit"; fi
     source_after=$(systemctl show "$source_unit" -p UnitFileState --value) || die '无法确认旧服务自启动已禁用'

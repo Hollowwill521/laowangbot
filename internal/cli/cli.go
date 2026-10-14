@@ -134,7 +134,7 @@ func Main(buildVersion string) {
 			os.Exit(1)
 		}
 		env := config.ReadEnv(*root, os.Environ())
-		builder := sourceplugin.Builder{Root: *root, Binary: binary, Version: version, Repo: env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Source: env.Get("LAOWANGBOT_SOURCE", "")}
+		builder := sourceplugin.Builder{Root: *root, Binary: binary, Version: version, Repo: env.Get("LAOWANGBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Source: env.Get("LAOWANGBOT_SOURCE", "")}
 		if *sourceUpdate != "" || *sourceRollback {
 			if *sourceRollback {
 				err = builder.Rollback(ctx)

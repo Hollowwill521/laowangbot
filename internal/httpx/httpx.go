@@ -25,7 +25,8 @@ var shared = &http.Client{
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-		MaxIdleConns:          4,
+		MaxIdleConns:          32,
+		MaxIdleConnsPerHost:   8,
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: time.Second,
@@ -47,7 +48,20 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 		return errors.New("too many redirects")
 	}
 	first := via[0]
-	credential := first.URL.Query().Get("key") != ""
+	credential := false
+	for name, values := range first.URL.Query() {
+		if strings.EqualFold(name, "key") {
+			for _, value := range values {
+				if value != "" {
+					credential = true
+					break
+				}
+			}
+		}
+		if credential {
+			break
+		}
+	}
 	for _, name := range credentialHeaders {
 		credential = credential || first.Header.Get(name) != ""
 	}

@@ -493,7 +493,7 @@ func (s *eatgifService) render(ctx context.Context, client *bot.Client, job *ren
 	if err != nil {
 		return nil, renderMeta{}, err
 	}
-	directory, err := os.MkdirTemp("", "mibot-eatgif-")
+	directory, err := os.MkdirTemp("", "laowangbot-eatgif-")
 	if err != nil {
 		return nil, renderMeta{}, err
 	}

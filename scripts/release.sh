@@ -4,8 +4,9 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-version=${1:-${LAOWANGBOT_VERSION:-${MIBOT_VERSION:-}}}
+version=${1:-${LAOWANGBOT_VERSION:-}}
 [[ -n "$version" ]] || { echo "Usage: bash scripts/release.sh <version>" >&2; exit 2; }
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must be a stable tag such as v0.2.1" >&2; exit 2; }
 out="$root/dist"
 rm -rf "$out"
 mkdir -p "$out"

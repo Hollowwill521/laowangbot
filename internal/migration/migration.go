@@ -74,7 +74,7 @@ func Run(o Options) (*Report, error) {
 	}
 	// Existing Go deployments use the same lock; refuse a live source.
 	// Do not create a lock file in the source (the source remains unchanged).
-	if _, err := os.Stat(filepath.Join(src, "mibot-lite.lock")); err == nil {
+	if _, err := os.Stat(filepath.Join(src, platform.LegacyLockName)); err == nil {
 		lock, err := platform.LockRoot(src)
 		if err != nil {
 			return nil, err
@@ -152,7 +152,7 @@ func Run(o Options) (*Report, error) {
 		r.Conversion = log.String()
 	}
 	env := config.ReadEnv(stage, nil)
-	if len(env.Prefixes()) > 0 && env.Get("MIBOT_PREFIX", "") == "" && env["TB_PREFIX"] != "" {
+	if len(env.Prefixes()) > 0 && env.Get("LAOWANGBOT_PREFIX", "") == "" && env["TB_PREFIX"] != "" {
 		if e = config.SetEnv(stage, "LAOWANGBOT_PREFIX", env["TB_PREFIX"]); e != nil {
 			return nil, e
 		}

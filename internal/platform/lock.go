@@ -9,9 +9,12 @@ import (
 
 var ErrRunning = errors.New("another instance is using this deployment directory")
 
-// Keep the old lock filename so running mibot-lite and laowangbot cannot share a deployment.
+// LegacyLockName is shared with mibot-lite so old and new binaries cannot
+// serve the same deployment concurrently.
+const LegacyLockName = "mibot-lite.lock"
+
 func LockRoot(root string) (*os.File, error) {
-	f, e := os.OpenFile(filepath.Join(root, "mibot-lite.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	f, e := os.OpenFile(filepath.Join(root, LegacyLockName), os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
 		return nil, e
 	}

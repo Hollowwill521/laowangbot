@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	api "github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 	"html"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	api "github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 )
 
 type Target struct {
@@ -77,10 +79,11 @@ type Monitor struct {
 	nextPoll    int64
 	conflicts   int
 	lastCleanup int64
+	client      *http.Client
 }
 
 func New(h api.Host, path string) (*Monitor, error) {
-	m := &Monitor{host: h, path: path, botBase: "https://api.telegram.org"}
+	m := &Monitor{host: h, path: path, botBase: "https://api.telegram.org", client: &http.Client{Timeout: 5 * time.Second}}
 	m.state.Settings = Settings{IsGlobalEnabled: true, EnableDedup: true, MonitorAdminsMessages: true}
 	b, e := os.ReadFile(path)
 	if e == nil {
@@ -570,8 +573,11 @@ func (m *Monitor) cleanup(now int64) {
 func (m *Monitor) tick(ctx context.Context) error {
 	now := time.Now().UnixMilli()
 	var errs []error
+	dirty := false
 	if now-m.lastCleanup >= 600000 {
+		before := m.lastCleanup
 		m.cleanup(now)
+		dirty = m.lastCleanup != before
 	}
 	jobs := m.state.Jobs
 	m.state.Jobs = nil
@@ -580,6 +586,7 @@ func (m *Monitor) tick(ctx context.Context) error {
 			m.state.Jobs = append(m.state.Jobs, j)
 			continue
 		}
+		dirty = true
 		if j.Kind == "bot_retry" {
 			_, err := m.bot(ctx, "sendMessage", j.Payload)
 			if err != nil && strings.Contains(err.Error(), "network failure") && j.Attempt < 3 {
@@ -640,9 +647,14 @@ func (m *Monitor) tick(ctx context.Context) error {
 		}
 	}
 	if m.state.Settings.BotToken != "" && now >= m.nextPoll && m.awaitingCallback(now) {
+		before := m.state.UpdateID
 		if err := m.poll(ctx); err != nil {
 			errs = append(errs, err)
 		}
+		dirty = dirty || m.state.UpdateID != before
 	}
-	return errors.Join(append(errs, m.save())...)
+	if dirty {
+		errs = append(errs, m.save())
+	}
+	return errors.Join(errs...)
 }

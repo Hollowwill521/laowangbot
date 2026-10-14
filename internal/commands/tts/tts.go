@@ -29,7 +29,8 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/store"
 )
 
-// endpoint 是 fish.audio 的合成接口。可以用环境变量 MIBOT_FISH_ENDPOINT 换掉，测试用。
+// endpoint 是 fish.audio 的合成接口。可用 LAOWANGBOT_FISH_ENDPOINT
+// （兼容 legacy MIBOT_FISH_ENDPOINT）替换，测试用。
 const endpoint = "https://api.fish.audio/v1/tts"
 
 // maxText 是一次合成的字数上限。fish.audio 按字数计费，回复一条长消息时
@@ -167,10 +168,11 @@ func synthesize(ctx context.Context, config document, key, voiceID, text string)
 		headers["model"] = config.Model
 	}
 	target := endpoint
-	if override := os.Getenv("MIBOT_FISH_ENDPOINT"); override != "" {
-		target = override
-	}
-	if override := os.Getenv("LAOWANGBOT_FISH_ENDPOINT"); override != "" {
+	if override, set := os.LookupEnv("LAOWANGBOT_FISH_ENDPOINT"); set {
+		if override != "" {
+			target = override
+		}
+	} else if override := os.Getenv("MIBOT_FISH_ENDPOINT"); override != "" {
 		target = override
 	}
 	response, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: target, Headers: headers, Body: body,
@@ -325,7 +327,7 @@ func (s *service) speak(ctx context.Context, inv *command.Invocation) error {
 		}
 		return inv.EditText(ctx, "❌ 合成失败："+httpx.Reason(err))
 	}
-	directory, err := os.MkdirTemp("", "mibot-tts-")
+	directory, err := os.MkdirTemp("", "laowangbot-tts-")
 	if err != nil {
 		return err
 	}

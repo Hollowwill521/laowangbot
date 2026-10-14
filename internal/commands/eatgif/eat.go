@@ -517,7 +517,7 @@ func (s *eatService) render(ctx context.Context, inv *command.Invocation, reply 
 	if err != nil {
 		return nil, err
 	}
-	directory, err := os.MkdirTemp("", "mibot-eat-")
+	directory, err := os.MkdirTemp("", "laowangbot-eat-")
 	if err != nil {
 		return nil, err
 	}

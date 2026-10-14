@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/OrionG-hub/laowangbot/internal/sourceplugin"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
 	"github.com/OrionG-hub/laowangbot/internal/httpx"
+	"github.com/OrionG-hub/laowangbot/internal/sourceplugin"
 )
 
 type release struct {
@@ -30,13 +32,17 @@ type release struct {
 	} `json:"assets"`
 }
 
+var releaseRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+
 // Register 注册 .update。
 func Register(a *app.App) {
-	repo := a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
+	repo := a.Env.Get("LAOWANGBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
 	a.Registry.Register(&command.Command{Name: "update", Description: "检查版本，无插件下载更新，有插件保留源码编译", Usage: "[check|run|rollback]", Timeout: 30 * time.Minute,
 		Help: func(prefix string) string {
 			return "<b>程序更新</b>\n" + command.Code(prefix+"update") + " 当前版本与回滚状态\n" + command.Code(prefix+"update check") + " 读取 GitHub Releases 检查新版本\n" +
-				command.Code(prefix+"update run") + " 无源码插件时下载校验官方二进制；有源码插件时限流编译、检查、替换并重启\n" + command.Code(prefix+"update rollback") + " 恢复上次构建的程序和插件源码并重启（状态数据不回退）\n发布仓库由 " + command.Code("MIBOT_UPDATE_REPO") + " 指定。\n无源码插件时只需下载权限；源码插件更新需要 Go（满足新版 go.mod）和 Git，以及源码/依赖下载网络；不依赖 Node.js。手动插件源码与版本原样保留，远程插件也不会随主程序更新自动升级。编译或检查失败保留当前程序。插件更新请用 tpm update；手动插件用 tpm replace。首次可用 LAOWANGBOT_SOURCE 指定本地源码进行插件编译。Windows 暂不支持源码自编译替换，请外部构建后停止服务手动替换。"
+				command.Code(prefix+"update run") + " 无源码插件时下载校验官方二进制；有源码插件时限流编译、检查、替换并重启\n" + command.Code(prefix+"update rollback") + " 恢复上次构建的程序和插件源码并重启（状态数据不回退）\n发布仓库由 " + command.Code("LAOWANGBOT_UPDATE_REPO") + " 指定（兼容 legacy MIBOT_UPDATE_REPO）。\n无源码插件时只需下载权限；源码插件更新需要 Go（满足新版 go.mod）和 Git，以及源码/依赖下载网络；不依赖 Node.js。手动插件源码与版本原样保留，远程插件也不会随主程序更新自动升级。编译或检查失败保留当前程序。插件更新请用 tpm update；手动插件用 tpm replace。首次可用 LAOWANGBOT_SOURCE 指定本地源码进行插件编译。Windows 暂不支持源码自编译替换，请外部构建后停止服务手动替换。"
 		},
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
 			binary, err := os.Executable()
@@ -103,6 +109,9 @@ func Register(a *app.App) {
 }
 
 func fetchRelease(ctx context.Context, repo string) (*release, error) {
+	if !releaseRepoPattern.MatchString(repo) {
+		return nil, errors.New("invalid release repository")
+	}
 	response, err := httpx.Do(ctx, httpx.Request{URL: "https://api.github.com/repos/" + repo + "/releases/latest",
 		Headers: map[string]string{"Accept": "application/vnd.github+json"}, Timeout: 20 * time.Second, MaxBytes: 1 << 20})
 	if err != nil {
@@ -115,8 +124,8 @@ func fetchRelease(ctx context.Context, repo string) (*release, error) {
 	if err := json.Unmarshal(response.Body, &parsed); err != nil {
 		return nil, err
 	}
-	if parsed.TagName == "" {
-		return nil, errors.New("release has no tag")
+	if !releaseTagPattern.MatchString(parsed.TagName) {
+		return nil, errors.New("release tag is not a stable semver")
 	}
 	return &parsed, nil
 }
@@ -126,11 +135,42 @@ func normalizeVersion(value string) string {
 }
 
 func newer(current, latest string) bool {
-	current, latest = normalizeVersion(current), normalizeVersion(latest)
-	if current == "" || current == "dev" {
+	if !releaseTagPattern.MatchString(strings.TrimSpace(latest)) {
+		return false
+	}
+	latestParts, ok := parseVersion(latest)
+	if !ok {
+		return false
+	}
+	if strings.TrimSpace(current) == "" || strings.EqualFold(strings.TrimSpace(current), "dev") {
 		return true
 	}
-	return current != latest
+	currentParts, ok := parseVersion(current)
+	if !ok {
+		return false
+	}
+	for i := range currentParts {
+		if latestParts[i] != currentParts[i] {
+			return latestParts[i] > currentParts[i]
+		}
+	}
+	return false
+}
+
+func parseVersion(value string) ([3]int, bool) {
+	var parts [3]int
+	value = normalizeVersion(value)
+	if !versionPattern.MatchString(value) {
+		return parts, false
+	}
+	for i, part := range strings.Split(value, ".") {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return parts, false
+		}
+		parts[i] = n
+	}
+	return parts, true
 }
 
 // busy 让更新和回滚同一时间只有一个在跑。

@@ -1,5 +1,6 @@
 // Package config 读取部署目录：config.json（和 MiBox 写的是同一个文件，
-// 已有的账号不用改就能直接用），以及可选的 .env，里面是几项 MIBOT_* 设置。
+// 已有的账号不用改就能直接用），以及可选的 .env，里面是 LAOWANGBOT_*
+// 设置，并兼容旧的 MIBOT_* 名称。
 package config
 
 import (
@@ -123,7 +124,7 @@ func Read(root string) (*Config, error) {
 type Env map[string]string
 
 // ReadEnv 读取 <root>/.env 里的 KEY=value 行（文件不存在也没关系），
-// 再用进程环境变量里的所有 MIBOT_* 变量覆盖上去。
+// 再用进程环境变量里的 LAOWANGBOT_* 与 legacy MIBOT_* 变量覆盖上去。
 func ReadEnv(root string, environ []string) Env {
 	env := Env{}
 	if file, err := os.Open(filepath.Join(root, ".env")); err == nil {
@@ -204,10 +205,10 @@ func SetEnv(root, key, value string) error {
 	return os.Rename(temporary.Name(), path)
 }
 
-// Prefixes 返回命令前缀：优先用 MIBOT_PREFIX（以空格分隔），
-// 没有设置就用 MiBox 的默认值。
+// Prefixes 返回命令前缀：优先用 LAOWANGBOT_PREFIX（兼容 legacy
+// MIBOT_PREFIX），没有设置就用默认值。
 func (e Env) Prefixes() []string {
-	if configured := strings.Fields(e.Get("MIBOT_PREFIX", "")); len(configured) > 0 {
+	if configured := strings.Fields(e.Get("LAOWANGBOT_PREFIX", "")); len(configured) > 0 {
 		return configured
 	}
 	return []string{".", "。", "$", "，"}
@@ -216,13 +217,16 @@ func (e Env) Prefixes() []string {
 // Get 返回某项设置，没有设置就返回默认值。
 func (e Env) Get(key, fallback string) string {
 	if strings.HasPrefix(key, "MIBOT_") {
-		if v, ok := e["LAOWANGBOT_"+strings.TrimPrefix(key, "MIBOT_")]; ok {
-			return strings.TrimSpace(v)
-		}
+		key = "LAOWANGBOT_" + strings.TrimPrefix(key, "MIBOT_")
 	}
-
-	if value := strings.TrimSpace(e[key]); value != "" {
-		return value
+	if value, ok := e[key]; ok {
+		return strings.TrimSpace(value)
+	}
+	if strings.HasPrefix(key, "LAOWANGBOT_") {
+		legacy := "MIBOT_" + strings.TrimPrefix(key, "LAOWANGBOT_")
+		if value, ok := e[legacy]; ok {
+			return strings.TrimSpace(value)
+		}
 	}
 	return fallback
 }

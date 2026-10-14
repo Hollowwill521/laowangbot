@@ -1136,7 +1136,7 @@ func (s *yvluService) embedVideo(ctx context.Context, inv *command.Invocation, m
 		item.Media = &quotePhot{URL: "data:video/webm;base64," + base64.StdEncoding.EncodeToString(file.Data)}
 		return
 	}
-	directory, err := os.MkdirTemp("", "mibot-yvlu-")
+	directory, err := os.MkdirTemp("", "laowangbot-yvlu-")
 	if err != nil {
 		return
 	}

@@ -56,7 +56,7 @@ var miboxImports = []miboxImport{
 }
 
 // ImportMiBox 把 MiBox 部署里的插件数据搬到 dataDir：格式相同的原样复制，
-// 不同的先转换；再把 MiBox .env 里的 TB_PREFIX 写成这边的 MIBOT_PREFIX。
+// 不同的先转换；再把 MiBox .env 里的 TB_PREFIX 写成 LAOWANGBOT_PREFIX。
 // 目标已存在的文件、已设置的前缀都不覆盖。
 func ImportMiBox(miboxRoot, dataDir string, out io.Writer) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
@@ -103,21 +103,24 @@ func ImportMiBox(miboxRoot, dataDir string, out io.Writer) error {
 	return importPrefix(miboxRoot, filepath.Dir(dataDir), out)
 }
 
-// importPrefix 把 MiBox 的 TB_PREFIX（空格分隔的前缀）写成 MIBOT_PREFIX，
+// importPrefix 把 MiBox 的 TB_PREFIX（空格分隔的前缀）写成 LAOWANGBOT_PREFIX，
 // 这边已经设过前缀就不动。没有这一步，自定义过前缀的人换过来后命令全都没反应。
 func importPrefix(miboxRoot, root string, out io.Writer) error {
 	prefixes := config.ReadEnv(miboxRoot, nil)["TB_PREFIX"]
 	if strings.TrimSpace(prefixes) == "" {
 		return nil
 	}
-	if _, set := config.ReadEnv(root, nil)["MIBOT_PREFIX"]; set {
-		fmt.Fprintf(out, "skip TB_PREFIX (MIBOT_PREFIX already set)\n")
+	env := config.ReadEnv(root, nil)
+	_, newSet := env["LAOWANGBOT_PREFIX"]
+	_, legacySet := env["MIBOT_PREFIX"]
+	if newSet || legacySet {
+		fmt.Fprintf(out, "skip TB_PREFIX (LAOWANGBOT_PREFIX or legacy MIBOT_PREFIX already set)\n")
 		return nil
 	}
 	value := strings.Join(strings.Fields(prefixes), " ")
-	if err := config.SetEnv(root, "MIBOT_PREFIX", value); err != nil {
+	if err := config.SetEnv(root, "LAOWANGBOT_PREFIX", value); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "imported TB_PREFIX -> MIBOT_PREFIX=%s\n", value)
+	fmt.Fprintf(out, "imported TB_PREFIX -> LAOWANGBOT_PREFIX=%s\n", value)
 	return nil
 }

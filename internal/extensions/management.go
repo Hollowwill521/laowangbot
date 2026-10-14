@@ -35,7 +35,7 @@ func registerManagement(a *app.App, m plugin.Manager) {
 		}
 		progress := newTPMProgress(ctx, inv.EditText)
 		defer progress.Stop()
-		builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Source: a.Env.Get("LAOWANGBOT_SOURCE", ""), Repo: a.Env.Get("MIBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Progress: progress.Stage}
+		builder := sourceplugin.Builder{Root: a.Root, Binary: binary, Version: a.Version, Source: a.Env.Get("LAOWANGBOT_SOURCE", ""), Repo: a.Env.Get("LAOWANGBOT_UPDATE_REPO", "OrionG-hub/laowangbot"), Progress: progress.Stage}
 		compiledManager := &sourceManager{Manager: m, ctx: ctx, apply: builder.Apply}
 		r, e := executeTPM(ctx, managedTPM{compiledManager, a.Registry}, inv.Args, progress.Item)
 		if e != nil {

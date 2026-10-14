@@ -271,7 +271,7 @@ func whoisQuery(ctx context.Context, name string, data *store.Store[whoisData]) 
 		}
 	}
 	response, err := httpx.Do(ctx, httpx.Request{URL: "https://namebeta.com/api/search/check?query=" + url.QueryEscape(name),
-		Headers: map[string]string{"User-Agent": "Mi Box"}, Timeout: 15 * time.Second, MaxBytes: 4 << 20})
+		Headers: map[string]string{"User-Agent": httpx.UserAgent}, Timeout: 15 * time.Second, MaxBytes: 4 << 20})
 	if err != nil || !response.OK() {
 		return "", err
 	}

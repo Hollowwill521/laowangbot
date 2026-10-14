@@ -46,7 +46,10 @@ func (m *Monitor) bot(ctx context.Context, method string, payload any) (botRespo
 		return result, fmt.Errorf("Bot API request creation failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := m.client
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
 	res, e := client.Do(req)
 	if e != nil {
 		return result, fmt.Errorf("Bot API %s network failure", method)

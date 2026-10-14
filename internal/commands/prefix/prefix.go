@@ -127,7 +127,8 @@ func Register(a *app.App) {
 			inv.Log.Error("prefix.persist_failed", "error", err.Error())
 			note = "⚠️ 写入 .env 失败，只在本次运行里生效"
 		} else if value, set := os.LookupEnv("LAOWANGBOT_PREFIX"); set && value != "" {
-			// 进程环境变量里的 MIBOT_* 会盖过 .env，重启后生效的会是它。
+			// 进程环境变量里的 LAOWANGBOT_*（兼容 legacy MIBOT_*）会盖过 .env，
+			// 重启后生效的会是它。
 			note = "⚠️ 已写入 .env，但服务的环境变量里也设了 LAOWANGBOT_PREFIX，重启后会以那个为准"
 		}
 		return inv.Edit(ctx, "✅ 前缀已改为："+quotePrefixes(next)+"\n<i>"+command.Escape(note)+"</i>\n\n以后这样用："+

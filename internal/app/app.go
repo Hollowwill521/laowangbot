@@ -92,6 +92,8 @@ type App struct {
 	jobs             sync.WaitGroup
 	closeMu          sync.Mutex
 	closed           bool
+	closeDone        chan struct{}
+	closing          bool
 	cleanup          []func()
 	closeErr         error
 }
@@ -158,7 +160,7 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 	app := &App{Root: root, Version: options.Version, Logger: logger, Config: cfg, Env: env,
 		Registry: command.New(env.Prefixes(), logger), Started: time.Now(), BootID: strconv.FormatInt(time.Now().UnixNano(), 36),
 		Logs: options.Logs, Level: options.Level,
-		peers: bot.NewPeerCache(), lock: lock, options: options}
+		peers: bot.NewPeerCache(), lock: lock, options: options, closeDone: make(chan struct{})}
 
 	state, err := tgstate.Open(filepath.Join(root, "updates.json"))
 	if err != nil {
@@ -278,6 +280,9 @@ type loggingHandler struct {
 }
 
 func (h loggingHandler) Handle(ctx context.Context, updates tg.UpdatesClass) error {
+	if !h.logger.Enabled(ctx, slog.LevelDebug) {
+		return h.next.Handle(ctx, updates)
+	}
 	switch value := updates.(type) {
 	case *tg.Updates:
 		h.logger.Debug("update.batch", slog.String("kind", "Updates"), slog.Any("types", updateNames(value.Updates)))
@@ -487,6 +492,11 @@ func (a *App) DispatchMessage(ctx context.Context, message *tg.Message) bool {
 func (a *App) OnClose(cleanup func()) {
 	a.closeMu.Lock()
 	if a.closed {
+		if a.closing {
+			a.cleanup = append(a.cleanup, cleanup)
+			a.closeMu.Unlock()
+			return
+		}
 		a.closeMu.Unlock()
 		cleanup()
 		return
@@ -496,21 +506,76 @@ func (a *App) OnClose(cleanup func()) {
 }
 func (a *App) Close() error {
 	a.closeMu.Lock()
-	defer a.closeMu.Unlock()
 	if a.closed {
-		return a.closeErr
+		a.closeMu.Unlock()
+		if a.closeDone != nil {
+			<-a.closeDone
+		}
+		a.closeMu.Lock()
+		err := a.closeErr
+		a.closeMu.Unlock()
+		return err
 	}
 	a.closed = true
-	for i := len(a.cleanup) - 1; i >= 0; i-- {
-		a.cleanup[i]()
+	a.closing = true
+	if a.closeDone == nil {
+		a.closeDone = make(chan struct{})
 	}
-	if a.state != nil {
-		a.closeErr = a.state.Close()
+	done := a.closeDone
+	cleanup := append([]func(){}, a.cleanup...)
+	a.cleanup = nil
+	state, lock := a.state, a.lock
+	a.closeMu.Unlock()
+	var closeErr error
+	for {
+		for i := len(cleanup) - 1; i >= 0; i-- {
+			func() {
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						closeErr = errors.Join(closeErr, fmt.Errorf("close cleanup panic: %v", recovered))
+					}
+				}()
+				cleanup[i]()
+			}()
+		}
+		a.closeMu.Lock()
+		cleanup = append([]func(){}, a.cleanup...)
+		a.cleanup = nil
+		a.closeMu.Unlock()
+		if len(cleanup) == 0 {
+			break
+		}
 	}
-	if a.lock != nil {
-		a.closeErr = errors.Join(a.closeErr, a.lock.Close())
+	if state != nil {
+		closeErr = errors.Join(closeErr, state.Close())
 	}
-	return a.closeErr
+	if lock != nil {
+		closeErr = errors.Join(closeErr, lock.Close())
+	}
+	for {
+		a.closeMu.Lock()
+		cleanup = append([]func(){}, a.cleanup...)
+		a.cleanup = nil
+		if len(cleanup) == 0 {
+			a.closeErr = closeErr
+			a.closing = false
+			close(done)
+			a.closeMu.Unlock()
+			break
+		}
+		a.closeMu.Unlock()
+		for i := len(cleanup) - 1; i >= 0; i-- {
+			func() {
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						closeErr = errors.Join(closeErr, fmt.Errorf("close cleanup panic: %v", recovered))
+					}
+				}()
+				cleanup[i]()
+			}()
+		}
+	}
+	return closeErr
 }
 
 // Run 连接、认证、启动后台任务，然后持续处理更新，直到 ctx 结束。
