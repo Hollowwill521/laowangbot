@@ -201,6 +201,15 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 			bot.IPRedactor{},
 			bot.Retrier{Logger: app.Logger, MaxWait: 60 * time.Second, Attempts: 5},
 			bot.EntityRecorder{Peers: app.peers},
+			// 记录本进程发出的消息，防止更新引擎补抓时把它们再次当成命令。
+			bot.SentRecorder{Self: func() int64 {
+				if client := app.bot.Load(); client != nil {
+					return client.SelfID()
+				}
+				return 0
+			}, Mark: func(peer tg.PeerClass, id int) {
+				app.seen.first(messageKey(bot.PeerID(peer), id), time.Now())
+			}},
 		},
 	}
 	if cfg.Proxy != nil {

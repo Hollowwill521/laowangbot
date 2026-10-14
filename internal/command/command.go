@@ -49,6 +49,11 @@ func (inv *Invocation) Rest(index int) string {
 	return strings.TrimSpace(strings.Join(inv.Args[index:], " "))
 }
 
+// RawAfter 返回命令名后面、跳过 n 个词后的原文，保留剩余内容中的空白和换行。
+func (inv *Invocation) RawAfter(n int) string {
+	return afterTokens(strings.TrimPrefix(inv.Text, inv.Prefix), 1+n)
+}
+
 // Edit 把命令消息改成 HTML 内容。
 func (inv *Invocation) Edit(ctx context.Context, html string) error {
 	return inv.Client.Edit(ctx, inv.Message, html)
@@ -83,6 +88,25 @@ func (inv *Invocation) EditText(ctx context.Context, text string) error {
 func (inv *Invocation) Reply(ctx context.Context, html string) error {
 	_, err := inv.Client.Reply(ctx, inv.Message, html)
 	return err
+}
+
+// EditPages 把第一页编辑进命令消息，其余各页作为回复发送。
+func (inv *Invocation) EditPages(ctx context.Context, pages []string) error {
+	for index, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if index == 0 {
+			if err := inv.Edit(ctx, page); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := inv.Reply(ctx, page); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Command 是一个已注册的命令。

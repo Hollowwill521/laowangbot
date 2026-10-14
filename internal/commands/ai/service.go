@@ -72,7 +72,15 @@ func Chat(ctx context.Context, request ChatRequest) (string, error) {
 	if shared == nil {
 		return "", kit.Fail("请先配置 ai 聊天模型")
 	}
-	cfg, err := shared.read()
+	return shared.Chat(ctx, request)
+}
+
+// Chat 用这个服务的统一配置生成文字。Register 返回的服务通过它给 .checkapi 等命令使用。
+func (s *Service) Chat(ctx context.Context, request ChatRequest) (string, error) {
+	if s == nil {
+		return "", kit.Fail("请先配置 ai 聊天模型")
+	}
+	cfg, err := s.read()
 	if err != nil {
 		return "", err
 	}

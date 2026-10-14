@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -30,12 +31,30 @@ var shared = &http.Client{
 		ExpectContinueTimeout: time.Second,
 		ForceAttemptHTTP2:     true,
 	},
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 3 {
-			return errors.New("too many redirects")
-		}
-		return nil
-	},
+	CheckRedirect: checkRedirect,
+}
+
+// ErrCredentialRedirect 表示带凭证的请求被重定向到了别的源。
+var ErrCredentialRedirect = errors.New("refusing credential redirect to another origin")
+
+// credentialHeaders 是常见的 API 凭证请求头。自定义请求头不会像
+// Authorization 一样被 net/http 在跨源重定向时自动清除。
+var credentialHeaders = []string{"Authorization", "Cookie", "X-Api-Key", "Api-Key", "X-Goog-Api-Key"}
+
+// checkRedirect 最多跟随三次重定向；带凭证时只允许留在同一个 scheme 和 host。
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 3 {
+		return errors.New("too many redirects")
+	}
+	first := via[0]
+	credential := first.URL.Query().Get("key") != ""
+	for _, name := range credentialHeaders {
+		credential = credential || first.Header.Get(name) != ""
+	}
+	if credential && (!strings.EqualFold(req.URL.Host, first.URL.Host) || !strings.EqualFold(req.URL.Scheme, first.URL.Scheme)) {
+		return ErrCredentialRedirect
+	}
+	return nil
 }
 
 // Request 描述一次调用。
@@ -44,6 +63,8 @@ type Request struct {
 	URL     string
 	Headers map[string]string
 	Body    []byte
+	// NoRedirect 禁止跟随重定向，返回原始 3xx 响应。
+	NoRedirect bool
 	// Timeout 限制整个调用的时长。零值表示 30 秒。
 	Timeout time.Duration
 	// MaxBytes 限制响应体大小。零值表示 2 MB。
@@ -87,7 +108,13 @@ func Do(ctx context.Context, request Request) (Response, error) {
 	for key, value := range request.Headers {
 		req.Header.Set(key, value)
 	}
-	resp, err := shared.Do(req)
+	client := shared
+	if request.NoRedirect {
+		copy := *shared
+		copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		client = &copy
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return Response{}, err
 	}
@@ -177,7 +204,13 @@ func Download(ctx context.Context, request Request, dst io.Writer) (int64, error
 	for key, value := range request.Headers {
 		req.Header.Set(key, value)
 	}
-	resp, err := shared.Do(req)
+	client := shared
+	if request.NoRedirect {
+		copy := *shared
+		copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		client = &copy
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}

@@ -123,13 +123,13 @@ func (c *aiConfig) normalize() {
 	}
 }
 
-type aiService struct {
+type Service struct {
 	a     *app.App
 	store *store.Store[aiConfig]
 }
 
 // shared 是 Register 建好的服务，.gt 和 .sum 借它来调用模型。
-var shared *aiService
+var shared *Service
 
 // Available 表示 .ai 已经注册，可以借它的模型翻译或生成文字。
 func Available() bool { return shared != nil }
@@ -139,7 +139,7 @@ func Translate(ctx context.Context, text, target string) (string, error) {
 	return shared.translate(ctx, text, target)
 }
 
-func (s *aiService) read() (aiConfig, error) {
+func (s *Service) read() (aiConfig, error) {
 	cfg, err := s.store.Read()
 	if err != nil {
 		return cfg, err
@@ -148,7 +148,7 @@ func (s *aiService) read() (aiConfig, error) {
 	return cfg, nil
 }
 
-func (s *aiService) update(mutate func(cfg *aiConfig) error) error {
+func (s *Service) update(mutate func(cfg *aiConfig) error) error {
 	return s.store.Update(func(cfg *aiConfig) error {
 		cfg.normalize()
 		return mutate(cfg)
@@ -181,7 +181,7 @@ func translationPrompt(target string) string {
 }
 
 // translate 用当前的对话模型翻译。
-func (s *aiService) translate(ctx context.Context, text, target string) (string, error) {
+func (s *Service) translate(ctx context.Context, text, target string) (string, error) {
 	cfg, err := s.read()
 	if err != nil {
 		return "", err
@@ -192,7 +192,7 @@ func (s *aiService) translate(ctx context.Context, text, target string) (string,
 func aiHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "<blockquote expandable><b>🤖 智能 AI 助手</b>\n\n<b>⚙️ API 配置:</b>\n• <code>" + p + "ai config add tag url key [type]</code> - 添加 API 配置\n• <code>" + p + "ai config del tag</code> - 删除 API 配置\n• <code>" + p +
-		"ai config list</code> - 查看配置\n• <code>" + p + "ai config type tag openai-compatible|openai|gemini|anthropic|doubao|moonshot|local-cliproxy</code> - 设置 API 类型\n• <code>" + p + "ai config stream tag on|off</code> - 流式传输\n• <code>" + p +
+		"ai config list</code> - 查看配置\n• <code>" + p + "ai config set tag url|key|type|stream|responses value</code> - 修改已有配置的一项\n• <code>" + p + "ai config type tag openai-compatible|openai|gemini|anthropic|doubao|moonshot|local-cliproxy</code> - 设置 API 类型\n• <code>" + p + "ai config stream tag on|off</code> - 流式传输\n• <code>" + p +
 		"ai config responses tag on|off</code> - Responses 模式\n\n<b>🧠 模型设置:</b>\n• <code>" + p + "ai model</code> - 查看当前模型\n• <code>" + p + "ai model chat tag model</code> - 设置聊天模型\n• <code>" + p + "ai model search tag model</code> - 设置搜索模型（未设置时沿用聊天模型）\n• <code>" + p +
 		"ai reasoning chat|search auto|none|minimal|low|medium|high|xhigh</code>\n• <code>" + p + "ai service chat|search auto|default|priority|fast|flex</code>\n\n<b>💬 提问:</b>\n• <code>" + p + "ai 问题</code> - 向 AI 提问；回复一条消息时，那条消息作为上下文，其中的图片一并发送\n• <code>" + p +
 		"ai search 问题</code> - 联网搜索并回答\n\n<b>✍️ 输出设置:</b>\n• <code>" + p + "ai prompt</code> / <code>" + p + "ai prompt set 内容</code> / <code>" + p + "ai prompt del</code>\n• <code>" + p + "ai collapse [on|off]</code> - 消息折叠\n• <code>" + p + "ai timeout [秒数]</code>\n• <code>" + p +
@@ -200,8 +200,8 @@ func aiHelp(prefix string) string {
 }
 
 // Register 注册 .ai。
-func Register(a *app.App) {
-	service := &aiService{a: a, store: kit.NewStore(a, "ai.json", aiDefaults)}
+func Register(a *app.App) *Service {
+	service := &Service{a: a, store: kit.NewStore(a, "ai.json", aiDefaults)}
 	shared = service
 	a.Registry.Register(&command.Command{Name: "ai", Description: "AI 对话、搜索与配置", Usage: "[search] 问题 | config | model | ...", Help: aiHelp, Timeout: 15 * time.Minute,
 		Handle: func(ctx context.Context, inv *command.Invocation) error {
@@ -216,6 +216,7 @@ func Register(a *app.App) {
 			}
 			return inv.Edit(ctx, "❌ <b>AI 操作失败</b>\n"+detail)
 		}})
+	return service
 }
 
 func orUnset(value string) string {
@@ -266,7 +267,7 @@ func telegraphStatus(cfg aiConfig) string {
 }
 
 // showStatus 读取配置，把 view 生成的状态分页显示。
-func (s *aiService) showStatus(ctx context.Context, inv *command.Invocation, view func(aiConfig) string) error {
+func (s *Service) showStatus(ctx context.Context, inv *command.Invocation, view func(aiConfig) string) error {
 	cfg, err := s.read()
 	if err != nil {
 		return err
@@ -274,7 +275,7 @@ func (s *aiService) showStatus(ctx context.Context, inv *command.Invocation, vie
 	return kit.SendPages(ctx, inv, command.HTMLPages(view(cfg), 3800))
 }
 
-func (s *aiService) handle(ctx context.Context, inv *command.Invocation) error {
+func (s *Service) handle(ctx context.Context, inv *command.Invocation) error {
 	sub := strings.ToLower(inv.Arg(0))
 	switch sub {
 	case "help", "?", "h":
@@ -416,7 +417,7 @@ func (s *aiService) handle(ctx context.Context, inv *command.Invocation) error {
 }
 
 // telegraph 处理 .ai telegraph：不带参数显示状态，on|off|limit|del 修改设置或删除记录。
-func (s *aiService) telegraph(ctx context.Context, inv *command.Invocation) error {
+func (s *Service) telegraph(ctx context.Context, inv *command.Invocation) error {
 	action := strings.ToLower(inv.Arg(1))
 	const usage = "用法：ai telegraph on|off|limit 数量|del 序号|all"
 	switch action {
@@ -503,7 +504,7 @@ func composeQuestion(own, replied string) (question, userText string) {
 	return question, "上下文:\n" + context + "\n\n问题:\n" + question
 }
 
-func (s *aiService) ask(ctx context.Context, inv *command.Invocation, search bool) error {
+func (s *Service) ask(ctx context.Context, inv *command.Invocation, search bool) error {
 	skip := 0
 	if search {
 		skip = 1
@@ -581,7 +582,7 @@ func (s *aiService) ask(ctx context.Context, inv *command.Invocation, search boo
 	return deliverAnswer(ctx, inv, answerPages(question, body, tag, cfg.Collapse), replyAnchor(inv.Message, reply))
 }
 
-func (s *aiService) configure(ctx context.Context, inv *command.Invocation) error {
+func (s *Service) configure(ctx context.Context, inv *command.Invocation) error {
 	action := strings.ToLower(inv.Arg(1))
 	if action == "" {
 		action = "list"
@@ -637,17 +638,24 @@ func (s *aiService) configure(ctx context.Context, inv *command.Invocation) erro
 		if !inv.Message.Saved {
 			return kit.Fail("API Key 只能在收藏夹中配置")
 		}
-		if parsed, err := url.Parse(link); err != nil || parsed.Host == "" {
-			return kit.Fail("API 地址无效")
+		if err := checkProviderURL(link); err != nil {
+			return err
 		}
 		if kind != "" && !slices.Contains(aiProviderTypes, kind) {
 			return kit.Fail("无效 API 类型")
 		}
+		replaced := false
 		if err := s.update(func(cfg *aiConfig) error {
-			cfg.Configs[tag] = aiProvider{Tag: tag, URL: link, Key: key, Type: kind, Models: cfg.Configs[tag].Models}
+			previous, ok := cfg.Configs[tag]
+			replaced = ok
+			cfg.Configs[tag] = aiProvider{Tag: tag, URL: link, Key: key, Type: kind,
+				Stream: previous.Stream, Responses: previous.Responses, Models: previous.Models}
 			return nil
 		}); err != nil {
 			return err
+		}
+		if replaced {
+			return inv.Edit(ctx, kit.Feedback("success", "已更新 "+tag+" 的地址和 Key", "流式、Responses 和模型沿用原来的设置"))
 		}
 	case "del":
 		if tag == "" {
@@ -665,42 +673,87 @@ func (s *aiService) configure(ctx context.Context, inv *command.Invocation) erro
 		}); err != nil {
 			return err
 		}
+	case "set", "edit":
+		field, value := strings.ToLower(inv.Arg(3)), inv.Arg(4)
+		if tag == "" || field == "" || value == "" {
+			return kit.Fail("用法：ai config set tag url|key|type|stream|responses value")
+		}
+		return s.setProvider(ctx, inv, tag, field, value)
 	case "type", "stream", "responses":
-		value := strings.ToLower(inv.Arg(3))
+		value := inv.Arg(3)
 		if tag == "" || value == "" {
 			return kit.Failf("用法：ai config %s tag value", action)
 		}
-		if err := s.update(func(cfg *aiConfig) error {
-			provider, ok := cfg.Configs[tag]
-			if !ok {
-				return kit.Fail("API 配置不存在")
-			}
-			switch action {
-			case "type":
-				if !slices.Contains(aiProviderTypes, value) {
-					return kit.Fail("无效 API 类型")
-				}
-				provider.Type = value
-			case "stream":
-				enabled, err := kit.OnOff(value)
-				if err != nil {
-					return err
-				}
-				provider.Stream = enabled
-			default:
-				enabled, err := kit.OnOff(value)
-				if err != nil {
-					return err
-				}
-				provider.Responses = enabled
-			}
-			cfg.Configs[tag] = provider
-			return nil
-		}); err != nil {
-			return err
-		}
+		return s.setProvider(ctx, inv, tag, action, value)
 	default:
 		return kit.Fail("未知 config 子命令")
 	}
 	return inv.Edit(ctx, kit.Feedback("success", "AI 配置已更新", ""))
+}
+
+// setProvider 修改已有配置的一项。地址和 Key 只允许在收藏夹中操作，避免明文出现在群聊。
+func (s *Service) setProvider(ctx context.Context, inv *command.Invocation, tag, field, value string) error {
+	switch field {
+	case "url", "key":
+		if !inv.Message.Saved {
+			return kit.Fail("API 地址和 Key 只能在收藏夹中修改")
+		}
+	case "type", "stream", "responses":
+		value = strings.ToLower(value)
+	default:
+		return kit.Failf("能改的有 url、key、type、stream、responses，%shelp ai 看用法", inv.Prefix)
+	}
+	if field == "url" {
+		if err := checkProviderURL(value); err != nil {
+			return err
+		}
+	}
+	var label string
+	if err := s.update(func(cfg *aiConfig) error {
+		provider, ok := cfg.Configs[tag]
+		if !ok {
+			return kit.Failf("没有标签是 %s 的 API 配置，%sai config list 可以看全部", tag, inv.Prefix)
+		}
+		switch field {
+		case "url":
+			provider.URL, label = value, "地址已改为 "+providerHost(value)
+		case "key":
+			provider.Key, label = value, "Key 已更新"
+		case "type":
+			if !slices.Contains(aiProviderTypes, value) {
+				return kit.Fail("无效 API 类型，可选：" + strings.Join(aiProviderTypes, "、"))
+			}
+			provider.Type, label = value, "接口类型已设为 "+value
+		case "stream", "responses":
+			enabled, err := kit.OnOff(value)
+			if err != nil {
+				return err
+			}
+			if field == "stream" {
+				provider.Stream, label = enabled, "流式传输已"+kit.OnOffText(enabled)
+			} else {
+				provider.Responses, label = enabled, "Responses 模式已"+kit.OnOffText(enabled)
+			}
+		}
+		cfg.Configs[tag] = provider
+		return nil
+	}); err != nil {
+		return err
+	}
+	return inv.Edit(ctx, kit.Feedback("success", tag+" "+label, ""))
+}
+
+func checkProviderURL(link string) error {
+	parsed, err := url.Parse(link)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil {
+		return kit.Fail("API 地址无效，要写完整的 https:// 地址")
+	}
+	return nil
+}
+
+func providerHost(link string) string {
+	if parsed, err := url.Parse(link); err == nil && parsed.Host != "" {
+		return parsed.Host
+	}
+	return "地址无效"
 }

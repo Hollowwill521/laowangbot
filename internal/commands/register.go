@@ -11,6 +11,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/bf"
 	"github.com/OrionG-hub/laowangbot/internal/commands/bin"
 	"github.com/OrionG-hub/laowangbot/internal/commands/calc"
+	"github.com/OrionG-hub/laowangbot/internal/commands/checkapi"
 	"github.com/OrionG-hub/laowangbot/internal/commands/core"
 	"github.com/OrionG-hub/laowangbot/internal/commands/da"
 	"github.com/OrionG-hub/laowangbot/internal/commands/dme"
@@ -48,7 +49,8 @@ func RegisterAll(a *app.App) {
 	react.Register(a)
 	whois.Register(a)
 	webdav.Register(a)
-	ai.Register(a)
+	models := ai.Register(a)
+	checkapi.Register(a, models)
 	gt.Register(a)
 	tr.Register(a)
 	speedtest.Register(a)
