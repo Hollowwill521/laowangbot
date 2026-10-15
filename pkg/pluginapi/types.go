@@ -105,6 +105,8 @@ type Call struct {
 	Data       string `json:"data,omitempty"`
 	ButtonText string `json:"button_text,omitempty"`
 	Simple     bool   `json:"simple,omitempty"`
+	// React: send a standard emoji reaction (Text carries the emoticon).
+	Big bool `json:"big,omitempty"`
 }
 type Folder struct {
 	ID              int    `json:"id"`

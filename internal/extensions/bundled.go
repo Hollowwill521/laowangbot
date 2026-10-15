@@ -13,6 +13,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/plugins/monitor"
 	"github.com/OrionG-hub/laowangbot/plugins/pmcaptcha"
 	"github.com/OrionG-hub/laowangbot/plugins/qdsg"
+	"github.com/OrionG-hub/laowangbot/plugins/trace"
 )
 
 const bundledSource = "builtin"
@@ -88,6 +89,7 @@ func bundledEntries(external []compiled.Entry) []compiled.Entry {
 		{qdsg.ManifestJSON(), qdsg.Open},
 		{bh.ManifestJSON(), bh.Open},
 		{pmcaptcha.ManifestJSON(), pmcaptcha.Open},
+		{trace.ManifestJSON(), trace.Open},
 	} {
 		var manifest plugin.Manifest
 		if err := json.Unmarshal([]byte(built.manifest), &manifest); err != nil {

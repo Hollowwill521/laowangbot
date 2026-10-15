@@ -130,6 +130,14 @@ func dispatch(ctx context.Context, b *bot.Client, c pluginapi.Call) (r pluginapi
 		}
 	case "webview":
 		return webview(ctx, b, p, c.URL, c.Simple)
+	case "react":
+		if c.MessageID <= 0 {
+			return r, errors.New("message_id required")
+		}
+		if c.Text == "" {
+			return r, errors.New("emoji required")
+		}
+		err = b.SendReaction(ctx, p, c.MessageID, c.Text, c.Big)
 	case "webview_data":
 		u, ok := bot.InputUser(p)
 		if !ok {

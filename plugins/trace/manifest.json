@@ -1,0 +1,1 @@
+{"capabilities":["edit","delete","react","messages","resolve"],"commands":["trace"],"description":"自动回应：给指定用户或含关键字的消息自动贴 emoji 回应（移植自 TeleBox trace）","events":["message"],"interval_seconds":1,"name":"trace","package":".","protocol_version":2,"timeout_seconds":60,"version":"1.0.0"}

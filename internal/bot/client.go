@@ -338,6 +338,14 @@ func (c *Client) ForwardToTopic(ctx context.Context, from, to tg.InputPeerClass,
 	return err
 }
 
+// SendReaction 给指定消息发送一个标准 emoji 回应。
+func (c *Client) SendReaction(ctx context.Context, peer tg.InputPeerClass, msgID int, emoticon string, big bool) error {
+	request := &tg.MessagesSendReactionRequest{Peer: peer, MsgID: msgID, Big: big}
+	request.SetReaction([]tg.ReactionClass{&tg.ReactionEmoji{Emoticon: emoticon}})
+	_, err := c.api.MessagesSendReaction(ctx, request)
+	return err
+}
+
 // GetMessages 读取指定的消息，并记下回复里带的实体。
 func (c *Client) GetMessages(ctx context.Context, peer tg.InputPeerClass, ids []int) ([]*tg.Message, error) {
 	inputs := make([]tg.InputMessageClass, len(ids))
