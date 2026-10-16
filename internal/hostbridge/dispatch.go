@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 	"github.com/gotd/td/tg"
 	"math/rand/v2"
@@ -22,6 +23,14 @@ func dispatch(ctx context.Context, b *bot.Client, c pluginapi.Call) (r pluginapi
 	}
 	if c.Method == "folders" {
 		return folders(ctx, b)
+	}
+	if c.Method == "get_brand" {
+		r.Text = brand.Get()
+		return r, nil
+	}
+	if c.Method == "set_brand" {
+		r.Text = brand.Set(c.Text)
+		return r, nil
 	}
 	if c.Target == "" {
 		return r, errors.New("target required")

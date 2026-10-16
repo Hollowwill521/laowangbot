@@ -14,6 +14,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/plugins/music_bot"
 	"github.com/OrionG-hub/laowangbot/plugins/pmcaptcha"
 	"github.com/OrionG-hub/laowangbot/plugins/qdsg"
+	"github.com/OrionG-hub/laowangbot/plugins/rename"
 	"github.com/OrionG-hub/laowangbot/plugins/trace"
 )
 
@@ -91,6 +92,7 @@ func bundledEntries(external []compiled.Entry) []compiled.Entry {
 		{bh.ManifestJSON(), bh.Open},
 		{pmcaptcha.ManifestJSON(), pmcaptcha.Open},
 		{musicbot.ManifestJSON(), musicbot.Open},
+		{rename.ManifestJSON(), rename.Open},
 		{trace.ManifestJSON(), trace.Open},
 	} {
 		var manifest plugin.Manifest
