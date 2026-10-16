@@ -1,5 +1,14 @@
 # 验证记录
 
+## 0.2.2 PR #6 冲突合并与发布验证（2026-10-16）
+
+- `go test -count=1 ./...`、`go test -race -count=1 ./...`、`go test -tags=integration -count=1 ./...` 均通过。
+- 覆盖率检查通过，总体语句覆盖率 23.6%；`go vet ./...`、`go build ./...`、gofmt 检查和 ShellCheck 通过。
+- 远程 `master` 的 `music_bot` 与 PR #6 的 `trace` 注册冲突已解决，两个内置插件均保留；Host API `react` 及大号动画参数编译通过。
+- 本地测试副本同步新增两个内置插件的数量和帮助断言；测试文件仍不纳入仓库。
+
+未使用真实 Telegram 账号验收 `trace` 的回应行为；Release 资产和 Docker 多架构构建由 GitHub Actions 执行。
+
 ## 0.2.1 优化与发布验证（2026-10-15）
 
 - `go test -count=1 ./...`、`go test -race -count=1 ./...`、`go test -count=1 -tags=integration ./...` 均通过。
