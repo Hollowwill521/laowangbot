@@ -11,6 +11,7 @@ import (
 	"github.com/OrionG-hub/laowangbot/pkg/pluginapi"
 	"github.com/OrionG-hub/laowangbot/plugins/bh"
 	"github.com/OrionG-hub/laowangbot/plugins/monitor"
+	"github.com/OrionG-hub/laowangbot/plugins/music_bot"
 	"github.com/OrionG-hub/laowangbot/plugins/pmcaptcha"
 	"github.com/OrionG-hub/laowangbot/plugins/qdsg"
 )
@@ -88,6 +89,7 @@ func bundledEntries(external []compiled.Entry) []compiled.Entry {
 		{qdsg.ManifestJSON(), qdsg.Open},
 		{bh.ManifestJSON(), bh.Open},
 		{pmcaptcha.ManifestJSON(), pmcaptcha.Open},
+		{musicbot.ManifestJSON(), musicbot.Open},
 	} {
 		var manifest plugin.Manifest
 		if err := json.Unmarshal([]byte(built.manifest), &manifest); err != nil {

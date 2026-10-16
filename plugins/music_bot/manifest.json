@@ -1,0 +1,1 @@
+{"capabilities":["send","edit","delete","forward","history","click"],"commands":["music_bot","mbs","mbkw","mbkg","mbqq","mbne","mbvk","mbym"],"description":"多音源音乐搜索：通过第三方音乐机器人搜索并转发音乐（移植自 TeleBox music_bot）","interval_seconds":1,"name":"music_bot","package":".","protocol_version":2,"timeout_seconds":60,"version":"1.0.0"}
