@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/statuscard"
@@ -81,7 +82,7 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	defer drawing.Unlock()
 	resources := sysinfo.SampleResources(ctx, a.Root, 160*time.Millisecond)
 	caption := statusCaption(a, registry, resources)
-	footer := "laowangbot " + kit.Version(a) + "  ·  Go " + runtime.Version()
+	footer := brand.Get() + " " + kit.Version(a) + "  ·  Go " + runtime.Version()
 	if version := gotdVersion(); version != "" {
 		footer += "  ·  gotd " + version
 	}
@@ -89,7 +90,7 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	if resources.HasCPU {
 		cpu = statuscard.Gauge{Percent: resources.SystemCPU, Known: true}
 	}
-	card, err := statuscard.Render(statuscard.Card{Name: "laowangbot", Uptime: time.Since(a.Started), CPU: cpu,
+	card, err := statuscard.Render(statuscard.Card{Name: brand.Get(), Uptime: time.Since(a.Started), CPU: cpu,
 		Memory: gaugeOf(resources.Memory), Disk: gaugeOf(resources.Disk), Swap: gaugeOf(resources.Swap), Footer: footer})
 	// 画布有几 MB，发完马上还给系统，不让一次 .status 抬高常驻内存。
 	defer debug.FreeOSMemory()
@@ -105,5 +106,5 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	} else {
 		inv.Log.Warn("status.card_render_failed", "error", err.Error())
 	}
-	return inv.Edit(ctx, "<b>laowangbot 状态</b>\n\n"+caption)
+	return inv.Edit(ctx, "<b>"+brand.Get()+" 状态</b>\n\n"+caption)
 }

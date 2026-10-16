@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/logtail"
 )
@@ -59,7 +60,7 @@ func logHeader(a *app.App, shown, held int, filter string) string {
 		level = a.Level.Level().String()
 	}
 	lines := []string{
-		"laowangbot " + a.Version,
+		brand.Get() + " " + a.Version,
 		"运行时长 " + shortDuration(time.Since(a.Started)),
 		"命令 " + strconv.Itoa(len(a.Registry.Commands())) + " 个",
 		"日志级别 " + level,

@@ -1,0 +1,1 @@
+{"capabilities":["edit","get_brand","set_brand"],"commands":["rename"],"description":"自定义品牌名：修改 .status/.sysinfo 等处显示的 laowangbot 字样","interval_seconds":1,"name":"rename","package":".","protocol_version":2,"timeout_seconds":30,"version":"1.0.0"}

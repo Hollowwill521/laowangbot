@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/httpx"
@@ -63,7 +64,7 @@ func Register(a *app.App) {
 				"CPU: " + command.Code(fmt.Sprintf("%d 核", machine.CPUs)),
 				"系统内存: " + command.Code(fmt.Sprintf("%.2f / %.2f MB", sysinfo.Megabytes(machine.TotalMemory-machine.FreeMemory), sysinfo.Megabytes(machine.TotalMemory))),
 				"",
-				"<b>laowangbot 进程</b>",
+				"<b>" + brand.Get() + " 进程</b>",
 				"Go: " + command.Code(runtime.Version()),
 				"PID: " + command.Code(fmt.Sprint(os.Getpid())),
 				"RSS: " + command.Code(fmt.Sprintf("%.2f MB", sysinfo.Megabytes(process.RSS))),
@@ -89,8 +90,8 @@ func Register(a *app.App) {
 
 func versionText(a *app.App) string {
 	return strings.Join([]string{
-		"<b>laowangbot 版本</b>", "",
-		"laowangbot: " + command.Code(kit.Version(a)),
+		"<b>" + brand.Get() + " 版本</b>", "",
+		brand.Get() + ": " + command.Code(kit.Version(a)),
 		"Go: " + command.Code(runtime.Version()),
 		"平台: " + command.Code(runtime.GOOS+" "+runtime.GOARCH),
 		"PID: " + command.Code(fmt.Sprint(os.Getpid())),

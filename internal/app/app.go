@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/config"
 	"github.com/OrionG-hub/laowangbot/internal/logtail"
@@ -156,6 +157,7 @@ func Prepare(ctx context.Context, options Options) (*App, error) {
 		}
 		return nil, err
 	}
+	brand.Init(filepath.Join(root, "data"))
 
 	app := &App{Root: root, Version: options.Version, Logger: logger, Config: cfg, Env: env,
 		Registry: command.New(env.Prefixes(), logger), Started: time.Now(), BootID: strconv.FormatInt(time.Now().UnixNano(), 36),
