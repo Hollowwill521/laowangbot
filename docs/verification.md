@@ -1,5 +1,12 @@
 # 验证记录
 
+## 0.2.3 PR #8 合并与发布验证（2026-10-16）
+
+- `go test -count=1 ./...`、`go test -race -count=1 ./...`、`go test -tags=integration -count=1 ./...` 均通过。
+- 覆盖率检查通过；`go vet ./...`、`go build ./...`、gofmt 检查和 ShellCheck 通过。
+- 内置 `rename` 插件支持自定义品牌名，`get_brand` / `set_brand` Host API 及无目标调用校验通过。
+- Release 资产和 Docker 多架构构建由 GitHub Actions 执行。
+
 ## 0.2.2 PR #6 冲突合并与发布验证（2026-10-16）
 
 - `go test -count=1 ./...`、`go test -race -count=1 ./...`、`go test -tags=integration -count=1 ./...` 均通过。
