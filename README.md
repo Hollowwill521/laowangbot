@@ -29,6 +29,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 
 Linux 使用 systemd，macOS 使用当前用户 launchd，Windows 使用当前用户登录计划任务。安装成功后在收藏夹执行 `.ping`、`.help` 验证连接；登录需要自己的 Telegram API ID、API hash、手机号和验证码。完整参数见 [安装指南](INSTALL.md)。
 
+同一台服务器可运行多个账号：每个账号使用不同的 `--root` 和 `--service-name`，分别登录即可。Linux 示例：
+
+```sh
+sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root /opt/laowangbot/account-a --service-name laowangbot-a'
+sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root /opt/laowangbot/account-b --service-name laowangbot-b'
+```
+
+两个部署目录各自保存登录会话和插件状态；API ID/API hash 可以相同，手机号和登录会话必须分别输入。
+
 ### 从旧人形一键迁移（无需复制配置）
 
 已有 mibot-lite、MiBox 或 TeleBox？使用以下迁移命令，**不要使用上方的新安装命令**。选择旧人形和旧目录后，脚本自动搬迁配置、会话及已支持的数据；旧会话有效时无需重新输入 API ID 或登录。

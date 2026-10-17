@@ -14,17 +14,17 @@ warn() { ui "$C_WARN" "$*"; }
 error() { ui "$C_ERROR" "$*"; }
 die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
-BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; WIZARD=0; SOURCE_ALREADY_STOPPED=0
+BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; SERVICE_NAME=laowangbot; WIZARD=0; SOURCE_ALREADY_STOPPED=0
 SOURCE_SERVICES=(); SOURCE_ENABLE_STATES=(); SOURCE_ACTIVE_STATES=(); SOURCE_TOUCHED=(); SOURCE_DISABLE_ATTEMPTED=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --root|--repo|--version|--binary|--migrate|--from|--restore)
+    --root|--repo|--version|--binary|--migrate|--from|--restore|--service-name)
       [ $# -ge 2 ] || { error "Missing value for $1"; exit 2; }
-      case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; esac; shift 2;;
+      case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; --service-name) SERVICE_NAME=$2;; esac; shift 2;;
     --wizard) WIZARD=1; shift;;
     --source-stopped) SOURCE_ALREADY_STOPPED=1; shift;;
     --no-service) SERVICE=0; shift;;
-    --help|-h) info 'Usage: install.sh [--wizard] [--source-stopped] [--root DIR] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
+    --help|-h) info 'Usage: install.sh [--wizard] [--source-stopped] [--root DIR] [--service-name NAME] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
     *) error "Unknown argument: $1"; exit 2;;
   esac
 done
@@ -32,6 +32,11 @@ done
 case "$FROM" in auto|mibot-lite|mibox|telebox) ;; *) die 'Unsupported migration source';; esac
 case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) die 'Use install.ps1 on Windows';; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; arm64|aarch64) ARCH=arm64;; *) die 'Unsupported architecture';; esac
+[[ "$SERVICE_NAME" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || die 'Service name must start with a letter, number or _ and contain only letters, numbers, . _ -'
+case "$SERVICE_NAME" in *.service) die 'Service name must omit the .service suffix';; esac
+SERVICE_UNIT="$SERVICE_NAME.service"
+LAUNCH_LABEL=io.github.laowangbot
+[ "$SERVICE_NAME" = laowangbot ] || LAUNCH_LABEL="io.github.laowangbot.$SERVICE_NAME"
 ask() { printf '%s%s%s' "$C_TITLE" "$1" "$C_RESET" >&2; IFS= read -r ANSWER || die '输入结束，迁移已取消'; }
 if [ "$WIZARD" = 1 ]; then
   [ -z "$MIGRATE$RESTORE" ] || die '--wizard 不能和 --migrate / --restore 同时使用'
@@ -76,7 +81,7 @@ if [ -n "$MIGRATE" ]; then
 fi
 valid_source_unit() {
   [[ "$1" =~ ^[A-Za-z0-9_@][A-Za-z0-9_.@-]*$ ]] || return 1
-  case "$1" in laowangbot|laowangbot.service|*@.service) return 1;; esac
+  case "$1" in "$SERVICE_NAME"|"$SERVICE_UNIT"|*@.service) return 1;; esac
 }
 source_matches() {
   local working
@@ -178,10 +183,32 @@ if [ -n "$MIGRATE" ]; then
   fi
 fi
 WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0; TARGET_START_ATTEMPTED=0
-UNIT=/etc/systemd/system/laowangbot.service
-[ "$OS" != darwin ] || UNIT="$HOME/Library/LaunchAgents/io.github.laowangbot.plist"
-service_stop() { if [ "$OS" = linux ]; then systemctl stop laowangbot; else launchctl bootout "gui/$(id -u)" "$UNIT"; fi; }
-service_start() { if [ "$OS" = linux ]; then systemctl daemon-reload && systemctl enable --now laowangbot && systemctl is-active --quiet laowangbot; else launchctl bootstrap "gui/$(id -u)" "$UNIT"; fi; }
+UNIT=/etc/systemd/system/$SERVICE_UNIT
+[ "$OS" != darwin ] || UNIT="$HOME/Library/LaunchAgents/$LAUNCH_LABEL.plist"
+service_stop() { if [ "$OS" = linux ]; then systemctl stop "$SERVICE_UNIT"; else launchctl bootout "gui/$(id -u)" "$UNIT"; fi; }
+service_start() { if [ "$OS" = linux ]; then systemctl daemon-reload && systemctl enable --now "$SERVICE_UNIT" && systemctl is-active --quiet "$SERVICE_UNIT"; else launchctl bootstrap "gui/$(id -u)" "$UNIT"; fi; }
+reject_other_services() {
+  if [ "$OS" = linux ]; then
+    local unit working
+    while read -r unit _; do
+      [ -n "$unit" ] || continue
+      [ "$unit" != "$SERVICE_UNIT" ] || continue
+      valid_source_unit "$unit" || continue
+      working=$(systemctl show "$unit" -p WorkingDirectory --value 2>/dev/null) || continue
+      [ "$working" = "$ROOT" ] || continue
+      die "Another service $unit already points at $ROOT; use that service name or stop it first"
+    done < <(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null)
+    return
+  fi
+  local agent working
+  for agent in "$HOME"/Library/LaunchAgents/*.plist; do
+    [ -f "$agent" ] || continue
+    [ "$agent" != "$UNIT" ] || continue
+    working=$(plutil -extract WorkingDirectory raw -o - "$agent" 2>/dev/null) || continue
+    [ "$working" = "$ROOT" ] || continue
+    die "Another launch agent $(basename "$agent") already points at $ROOT; use that service name or stop it first"
+  done
+}
 cleanup() {
   rc=$?; SAFE_TO_RESUME=1
   if [ "$SUCCESS" = 0 ]; then
@@ -189,7 +216,7 @@ cleanup() {
       if [ "$TARGET_START_ATTEMPTED" = 1 ]; then
         service_stop >/dev/null 2>&1 || SAFE_TO_RESUME=0
         if [ "$OS" = linux ] && [ "$SAFE_TO_RESUME" = 1 ]; then
-          target_state=$(systemctl show laowangbot -p ActiveState --value) || SAFE_TO_RESUME=0
+          target_state=$(systemctl show "$SERVICE_UNIT" -p ActiveState --value) || SAFE_TO_RESUME=0
           case "$target_state" in inactive|failed) ;; *) SAFE_TO_RESUME=0;; esac
         fi
       fi
@@ -221,6 +248,7 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
+if [ "$SERVICE" = 1 ]; then reject_other_services; fi
 info "准备 laowangbot 安装文件…"
 if [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
   ASSET=laowangbot-$OS-$ARCH
@@ -234,7 +262,7 @@ if [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
 fi
 chmod 755 "$WORK/new"
 if [ "$SERVICE" = 1 ] && [ -f "$UNIT" ]; then
-  if [ "$OS" = linux ]; then EXISTING=$(systemctl show laowangbot -p WorkingDirectory --value); [ "$EXISTING" = "$ROOT" ] || die 'Existing service points at another root'; else grep -Fq "<string>$ROOT</string>" "$UNIT" || die 'Existing launch agent points at another root'; fi
+  if [ "$OS" = linux ]; then EXISTING=$(systemctl show "$SERVICE_UNIT" -p WorkingDirectory --value); [ "$EXISTING" = "$ROOT" ] || die 'Existing service points at another root'; else EXISTING=$(plutil -extract WorkingDirectory raw -o - "$UNIT") || die 'Existing launch agent is not a valid plist'; [ "$EXISTING" = "$ROOT" ] || die 'Existing launch agent points at another root'; fi
   cp "$UNIT" "$WORK/unit"; HAD_UNIT=1
 fi
 # Snapshot and validate all selected services before touching any of them.
@@ -290,8 +318,8 @@ fi
 "$WORK/new" --check --root "$ROOT"
 if [ "$SERVICE" = 1 ] && [ "$HAD_UNIT" = 1 ]; then
   if [ "$OS" = linux ]; then
-    if systemctl is-active --quiet laowangbot; then service_stop; STOPPED=1; fi
-  elif launchctl print "gui/$(id -u)/io.github.laowangbot" >/dev/null 2>&1; then service_stop; STOPPED=1; fi
+    if systemctl is-active --quiet "$SERVICE_UNIT"; then service_stop; STOPPED=1; fi
+  elif launchctl print "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1; then service_stop; STOPPED=1; fi
 fi
 if [ -f "$ROOT/laowangbot" ]; then cp "$ROOT/laowangbot" "$WORK/previous"; HAD_BINARY=1; fi
 cp "$WORK/new" "$ROOT/.laowangbot.new"
@@ -301,11 +329,12 @@ if [ "$SERVICE" = 1 ]; then
   if [ "$OS" = linux ]; then
     cat > "$UNIT" <<UNIT
 [Unit]
-Description=laowangbot
+Description=laowangbot ($SERVICE_NAME)
 After=network-online.target
 [Service]
 WorkingDirectory=$ROOT
 ExecStart=$ROOT/laowangbot --supervise --root $ROOT
+Environment=LAOWANGBOT_SERVICE=$SERVICE_UNIT
 Restart=on-failure
 RestartSec=5
 UMask=0077
@@ -318,9 +347,10 @@ UNIT
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>Label</key><string>io.github.laowangbot</string>
+<key>Label</key><string>$LAUNCH_LABEL</string>
 <key>ProgramArguments</key><array><string>$ROOT/laowangbot</string><string>--supervise</string><string>--root</string><string>$ROOT</string></array>
 <key>WorkingDirectory</key><string>$ROOT</string>
+<key>EnvironmentVariables</key><dict><key>LAOWANGBOT_SERVICE</key><string>$LAUNCH_LABEL</string></dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
 <key>StandardOutPath</key><string>$ROOT/service.log</string>
 <key>StandardErrorPath</key><string>$ROOT/service.err.log</string>
