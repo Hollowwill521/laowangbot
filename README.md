@@ -10,9 +10,7 @@
 
 ## 快速开始
 
-### 全新安装（需要登录）
-
-首次安装和运行官方二进制无需 Go 或 Node.js；管理源码插件及源码升级需要 Go 和 Git。安装器先让你选择全新安装或迁移，再下载官方 Release 并校验 SHA-256，完成登录后启动后台任务。命令要求 Release 已包含对应平台构件与 `checksums.txt`；尚未发布时请使用下面的源码方式。
+运行对应系统的命令，按菜单完成安装。无需安装 Go 或 Node.js。
 
 ```sh
 # Linux
@@ -27,68 +25,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-Linux 使用 systemd，macOS 使用当前用户 launchd，Windows 使用当前用户登录计划任务。安装成功后在收藏夹执行 `.ping`、`.help` 验证连接；登录需要自己的 Telegram API ID、API hash、手机号和验证码。完整参数见 [安装指南](INSTALL.md)。
+安装菜单会引导你完成：
 
-选择全新安装时，若目标目录已有账号配置或会话，安装器会询问“新目录多开”还是“覆盖登录”。多开会提示输入新目录和独立服务名，默认使用原目录旁未占用的 `account-2`（已存在则递增）；覆盖登录使用当前程序替换账号会话，保留插件源码、编译记录、配置和状态。随后可输入显示名称，例如 `sakurabot`，与 `.rename sakurabot` 共用 `data/brand.json`；回车保留当前名称，新安装默认 `laowangbot`。
+- **全新安装**或从 **mibot-lite / MiBox / TeleBox 迁移**。
+- 检测到旧账号时，选择**新目录多开**，或**覆盖登录并保留插件数据**。
+- 设置显示名称，例如 `sakurabot`；回车使用默认名称或保留原设置。
 
-同一台服务器可运行多个账号：每个账号使用不同的 `--root` 和 `--service-name`，分别登录即可。Linux 示例：
+首次登录需准备 [Telegram API ID / API hash](https://my.telegram.org)、手机号、验证码和可选的两步验证密码。安装完成后，在 Telegram 收藏夹发送 `.ping`、`.help` 即可开始使用。
 
-```sh
-sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root /opt/laowangbot/account-a --service-name laowangbot-a'
-sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --root /opt/laowangbot/account-b --service-name laowangbot-b'
-```
-
-两个部署目录各自保存登录会话和插件状态；API ID/API hash 可以相同，手机号和登录会话必须分别输入。
-
-### 从旧人形一键迁移（无需复制配置）
-
-已有 mibot-lite、MiBox 或 TeleBox？在上述安装菜单选择“从旧部署迁移”，或使用以下命令直接进入迁移向导。选择旧人形和旧目录后，脚本自动搬迁配置、会话及已支持的数据；旧会话有效时无需重新输入 API ID 或登录。
-
-```sh
-# Linux
-sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root /opt/laowangbot'
-
-# macOS
-bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.sh) --wizard --root "$HOME/laowangbot-data"
-```
-
-```powershell
-# Windows PowerShell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Wizard -Root "$env:LOCALAPPDATA\laowangbot"
-```
-
-目标目录必须为空，旧目录保留。Linux 迁移会停止并禁用旧 systemd 服务自启动，失败恢复原状态；其他启动器须先自行停止并禁用自启动，避免同一会话同时运行。若已停在 `API ID:`，按 Ctrl+C 后改用以上命令；若提示目标非空，先检查内容，不要直接删除。未知旧插件只归档，代码仍需适配。详见[迁移指南](docs/migration.md)。
-
-### 源码安装与迁移
-
-源码安装需要 Go 1.26。在源码目录构建，然后按平台使用可信本地二进制：
-
-```sh
-bash scripts/build.sh ./laowangbot
-
-# Linux
-sudo bash scripts/install.sh --binary "$PWD/laowangbot" --root /opt/laowangbot
-
-# macOS
-bash scripts/install.sh --binary "$PWD/laowangbot" --root "$HOME/laowangbot-data"
-```
-
-```powershell
-# Windows PowerShell
-go build -trimpath -o .\laowangbot.exe .\cmd\laowangbot
-.\scripts\install.ps1 -Binary "$PWD\laowangbot.exe" -Root "$env:LOCALAPPDATA\laowangbot"
-```
-
-```sh
-# Migration
-bash scripts/install.sh --binary "$PWD/laowangbot" \
-  --migrate /path/to/old-bot --from auto \
-  --root "$HOME/laowangbot-data"
-```
-
-迁移前停止旧实例，目标目录必须为空；Linux 迁移同样需要 `sudo`，或添加 `--no-service`。新装与迁移示例二选一。
-
-默认前缀为 `.`、`。`、`$`、`，`；迁移保留自定义前缀。不要同时运行共享同一会话的旧、新实例。
+更新、备份、源码构建和完整参数见 [安装指南](INSTALL.md)。
 
 | 阅读目标 | 文档 |
 |---|---|
