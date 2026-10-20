@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
   [string]$Root = "$env:LOCALAPPDATA\laowangbot",
+  [ValidatePattern('^[A-Za-z0-9_][A-Za-z0-9_.-]*$')][string]$ServiceName = 'laowangbot',
   [string]$Version = 'latest',
   [string]$Binary,
   [string]$Migrate,
@@ -53,20 +54,37 @@ if ($Wizard) {
 }
 $exe = Join-Path $Root 'laowangbot.exe'
 $previous = Join-Path $Root 'laowangbot.previous.exe'
+$TaskName = $ServiceName
+if ($ServiceName.EndsWith('.service', [StringComparison]::OrdinalIgnoreCase)) { throw 'Service name must omit the .service suffix' }
 $work = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 New-Item -ItemType Directory $work | Out-Null
 $new = Join-Path $work 'new.exe'
 $changed = $false; $stopped = $false; $registered = $false; $hadBinary = Test-Path $exe
-$task = Get-ScheduledTask -TaskName laowangbot -ErrorAction SilentlyContinue
+$task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 $oldTaskXml = $null
 function Invoke-Bot([string]$Path, [string[]]$BotArgs) {
   & $Path @BotArgs
   if ($LASTEXITCODE -ne 0) { throw "laowangbot failed with exit code $LASTEXITCODE" }
 }
+function Test-TaskUsesRoot([object]$Candidate, [string]$Executable, [string]$TargetRoot) {
+  $rootPattern = '(?i)(^|\s)--root\s+"?' + [regex]::Escape($TargetRoot) + '"?(\s|$)'
+  foreach ($action in @($Candidate.Actions)) {
+    if ([string]::Equals([string]$action.Execute, $Executable, [StringComparison]::OrdinalIgnoreCase) -and [string]$action.Arguments -match $rootPattern) {
+      return $true
+    }
+  }
+  return $false
+}
+foreach ($candidate in @(Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+  if ($candidate.TaskName -eq $TaskName) { continue }
+  if (Test-TaskUsesRoot $candidate $exe $Root) {
+    throw "Existing task $($candidate.TaskName) already points at $Root; use that task name or stop/remove it first"
+  }
+}
 try {
   if ($task) {
     if ($task.Actions.Execute -ne $exe) { throw 'Existing task points at another root' }
-    $oldTaskXml = Export-ScheduledTask -TaskName laowangbot
+    $oldTaskXml = Export-ScheduledTask -TaskName $TaskName
   }
   if ($Rollback) {
     if ($Migrate -or $Restore -or $Binary) { throw 'Rollback cannot be combined with migration, restore or binary' }
@@ -89,12 +107,12 @@ try {
   if (!(Test-Path (Join-Path $Root 'config.json'))) { Invoke-Bot $new @('--login','--root',$Root) }
   Invoke-Bot $new @('--check','--root',$Root)
   if ($task -and $task.State -eq 'Running') {
-    Stop-ScheduledTask -TaskName laowangbot; $stopped = $true
+    Stop-ScheduledTask -TaskName $TaskName; $stopped = $true
     for ($i = 0; $i -lt 30; $i++) {
-      if ((Get-ScheduledTask -TaskName laowangbot).State -ne 'Running') { break }
+      if ((Get-ScheduledTask -TaskName $TaskName).State -ne 'Running') { break }
       Start-Sleep -Seconds 1
     }
-    if ((Get-ScheduledTask -TaskName laowangbot).State -eq 'Running') { throw 'Task did not stop; binary unchanged' }
+    if ((Get-ScheduledTask -TaskName $TaskName).State -eq 'Running') { throw 'Task did not stop; binary unchanged' }
   }
   # Task state alone does not prove a child has exited. Never overwrite a live executable.
   if (Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe }) { throw 'Executable is still running; stop it before updating' }
@@ -107,10 +125,10 @@ try {
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
-    Register-ScheduledTask -TaskName laowangbot -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
     $registered = $true
-    Start-ScheduledTask -TaskName laowangbot
-  } elseif ($stopped) { Start-ScheduledTask -TaskName laowangbot }
+    Start-ScheduledTask -TaskName $TaskName
+  } elseif ($stopped) { Start-ScheduledTask -TaskName $TaskName }
   if ($hadBinary) { Copy-Item (Join-Path $work 'old.exe') $previous -Force }
   if ($Migrate) { Write-Status "旧部署保留：$Migrate；迁移报告：$(Join-Path $Root 'migration-report.json')" Green }
   Write-Status "安装完成：$exe" Green
@@ -119,7 +137,7 @@ try {
   $failure = $_
   if ($changed) {
     if ($registered) {
-      Stop-ScheduledTask -TaskName laowangbot -ErrorAction SilentlyContinue
+      Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
       for ($i = 0; $i -lt 30; $i++) {
         if (!(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe })) { break }
         Start-Sleep -Seconds 1
@@ -133,8 +151,8 @@ try {
     if ($hadBinary) { Copy-Item (Join-Path $work 'old.exe') $exe -Force } else { Remove-Item $exe -Force }
   }
   if ($registered) {
-    if ($oldTaskXml) { Register-ScheduledTask -TaskName laowangbot -Xml $oldTaskXml -Force | Out-Null } else { Unregister-ScheduledTask -TaskName laowangbot -Confirm:$false }
+    if ($oldTaskXml) { Register-ScheduledTask -TaskName $TaskName -Xml $oldTaskXml -Force | Out-Null } else { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false }
   }
-  if ($stopped) { Start-ScheduledTask -TaskName laowangbot }
+  if ($stopped) { Start-ScheduledTask -TaskName $TaskName }
   throw $failure
 } finally { Remove-Item $work -Recurse -Force }

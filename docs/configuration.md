@@ -41,7 +41,7 @@ LAOWANGBOT_UPDATE_REPO=OrionG-hub/laowangbot
 | 设置 | 含义 |
 |---|---|
 | `LAOWANGBOT_PREFIX` | 空格分隔的前缀；无有效设置时默认 `. 。 $ ，` |
-| `LAOWANGBOT_SERVICE` | 服务重启路径使用的服务名 |
+| `LAOWANGBOT_SERVICE` | 服务重启路径使用的服务名；安装器为自定义 `--service-name` 的 systemd/launchd 实例自动注入 |
 | `LAOWANGBOT_UPDATE_REPO` | 核心程序更新仓库；默认 `OrionG-hub/laowangbot` 的官方 Release |
 | `LAOWANGBOT_FISH_ENDPOINT` | Fish 语音端点，仅进程环境；兼容 `MIBOT_FISH_ENDPOINT` |
 | `LAOWANGBOT_VERSION` | 构建脚本注入版本，不是运行时版本覆盖 |

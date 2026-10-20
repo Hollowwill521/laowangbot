@@ -309,7 +309,8 @@ func restore(file, root string, overwrite bool) error {
 	}
 	lock, err := app.LockRoot(root)
 	if errors.Is(err, app.ErrRunning) {
-		return errors.New("the service is running on " + root + "; stop it first (systemctl stop laowangbot)")
+		service := config.ReadEnv(root, os.Environ()).Get("LAOWANGBOT_SERVICE", "laowangbot.service")
+		return errors.New("the service is running on " + root + "; stop it first (configured service: " + service + ")")
 	}
 	if err != nil {
 		return err

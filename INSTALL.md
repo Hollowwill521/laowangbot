@@ -21,7 +21,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OrionG-hub/laowangbot/master/scripts/install.ps1'))) -Root "$env:LOCALAPPDATA\laowangbot"
 ```
 
-命令要求对应 Release 构件和 `checksums.txt` 已上传；尚未发布或需要本地构建时，使用下方的 `--binary` / `-Binary` 安装方式。
+命令要求对应 Release 构件和 `checksums.txt` 已上传；尚未发布或需要本地构建时，使用下方的 `--binary` / `-Binary` 安装方式。多账号部署时，为每个账号指定不同的 `--root` 和 `--service-name`（Windows 使用 `-Root` 和 `-ServiceName`）。
 
 ## 1. 构建与首次登录
 
@@ -50,7 +50,15 @@ sudo systemctl status laowangbot
 sudo journalctl -u laowangbot -f
 ```
 
-ARM64 使用 `GOARCH=arm64`。系统服务安装需要 root 和 systemd；脚本交互登录后创建 `laowangbot.service`。普通用户可加 `--no-service`，再手动运行 `--supervise`。服务目录只允许字母、数字、`/ . _ -`。
+ARM64 使用 `GOARCH=arm64`。系统服务安装需要 root 和 systemd；脚本交互登录后默认创建 `laowangbot.service`。多账号时指定不同的服务名：
+
+```sh
+sudo bash scripts/install.sh --binary "$PWD/laowangbot-linux-amd64" --root /opt/laowangbot/account-a --service-name laowangbot-a
+sudo bash scripts/install.sh --binary "$PWD/laowangbot-linux-amd64" --root /opt/laowangbot/account-b --service-name laowangbot-b
+sudo systemctl status laowangbot-a laowangbot-b
+```
+
+普通用户可加 `--no-service`，再手动运行 `--supervise`。服务名必须以字母、数字或 `_` 开头，只允许字母、数字、`.`、`_`、`-`，且不带 `.service` 后缀。
 
 ## 3. macOS（launchd）
 
@@ -61,7 +69,7 @@ launchctl print "gui/$(id -u)/io.github.laowangbot"
 tail -f "$HOME/laowangbot-data/service.err.log"
 ```
 
-不要用 sudo 安装用户 LaunchAgent。任务属于当前登录用户，写入 `~/Library/LaunchAgents/io.github.laowangbot.plist`；这是用户登录后的后台任务，并非无人登录时的系统服务。
+不要用 sudo 安装用户 LaunchAgent。任务属于当前登录用户，默认写入 `~/Library/LaunchAgents/io.github.laowangbot.plist`；多账号时加 `--service-name account-a`，脚本会写入独立的 LaunchAgent。这是用户登录后的后台任务，并非无人登录时的系统服务。
 
 ## 4. Windows（PowerShell）
 
@@ -73,13 +81,15 @@ go build -trimpath -o .\laowangbot.exe .\cmd\laowangbot
 Get-ScheduledTask -TaskName laowangbot
 ```
 
-直接 `go build` 的版本显示为 `dev`；正式构件用 `scripts/release.sh` 注入版本。安装器创建当前用户登录时运行的计划任务，任务运行 `--supervise`；不是 Windows 系统服务。`-NoService` 只安装，随后手动启动。脚本执行权限遵循本机策略。
+直接 `go build` 的版本显示为 `dev`；正式构件用 `scripts/release.sh` 注入版本。安装器创建当前用户登录时运行的计划任务，任务运行 `--supervise`；多账号时为每个账号指定不同的 `-ServiceName`。这不是 Windows 系统服务；`-NoService` 只安装，随后手动启动。脚本执行权限遵循本机策略。
 
 更新时重新运行上述安装命令，安装器停止旧任务并确认可执行文件不再运行后替换。回滚使用：
 
 ```powershell
-.\scripts\install.ps1 -Root "$env:LOCALAPPDATA\laowangbot" -Rollback
+.\scripts\install.ps1 -Root "$env:LOCALAPPDATA\laowangbot" -ServiceName laowangbot -Rollback
 ```
+
+多账号回滚时必须继续使用安装时的同一个 `-ServiceName`。
 
 Windows 不支持 Telegram 内直接替换正在运行的程序；`.update run` 会拒绝，必须通过安装器停止、替换和启动。若手工启动过进程，先停止它。
 
