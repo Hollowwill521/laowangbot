@@ -15,6 +15,8 @@ error() { ui "$C_ERROR" "$*"; }
 die() { error "$*"; exit 1; }
 ROOT=${LAOWANGBOT_ROOT:-$HOME/laowangbot}; REPO=OrionG-hub/laowangbot; VERSION=latest
 BINARY=; MIGRATE=; FROM=auto; RESTORE=; SERVICE=1; SERVICE_NAME=laowangbot; WIZARD=0; SOURCE_ALREADY_STOPPED=0
+RELOGIN=0; NONINTERACTIVE=0; INTERACTIVE=0
+[ ! -t 0 ] || INTERACTIVE=1
 SOURCE_SERVICES=(); SOURCE_ENABLE_STATES=(); SOURCE_ACTIVE_STATES=(); SOURCE_TOUCHED=(); SOURCE_DISABLE_ATTEMPTED=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,9 +24,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { error "Missing value for $1"; exit 2; }
       case "$1" in --root) ROOT=$2;; --repo) REPO=$2;; --version) VERSION=$2;; --binary) BINARY=$2;; --migrate) MIGRATE=$2;; --from) FROM=$2;; --restore) RESTORE=$2;; --service-name) SERVICE_NAME=$2;; esac; shift 2;;
     --wizard) WIZARD=1; shift;;
+    --non-interactive) NONINTERACTIVE=1; shift;;
     --source-stopped) SOURCE_ALREADY_STOPPED=1; shift;;
     --no-service) SERVICE=0; shift;;
-    --help|-h) info 'Usage: install.sh [--wizard] [--source-stopped] [--root DIR] [--service-name NAME] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
+    --help|-h) info 'Usage: install.sh [--wizard] [--non-interactive] [--source-stopped] [--root DIR] [--service-name NAME] [--version TAG] [--binary PATH] [--migrate DIR --from auto|mibot-lite|mibox|telebox] [--restore FILE] [--no-service]'; exit 0;;
     *) error "Unknown argument: $1"; exit 2;;
   esac
 done
@@ -32,32 +35,66 @@ done
 case "$FROM" in auto|mibot-lite|mibox|telebox) ;; *) die 'Unsupported migration source';; esac
 case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) die 'Use install.ps1 on Windows';; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; arm64|aarch64) ARCH=arm64;; *) die 'Unsupported architecture';; esac
-[[ "$SERVICE_NAME" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || die 'Service name must start with a letter, number or _ and contain only letters, numbers, . _ -'
-case "$SERVICE_NAME" in *.service) die 'Service name must omit the .service suffix';; esac
-SERVICE_UNIT="$SERVICE_NAME.service"
-LAUNCH_LABEL=io.github.laowangbot
-[ "$SERVICE_NAME" = laowangbot ] || LAUNCH_LABEL="io.github.laowangbot.$SERVICE_NAME"
-ask() { printf '%s%s%s' "$C_TITLE" "$1" "$C_RESET" >&2; IFS= read -r ANSWER || die '输入结束，迁移已取消'; }
-if [ "$WIZARD" = 1 ]; then
-  [ -z "$MIGRATE$RESTORE" ] || die '--wizard 不能和 --migrate / --restore 同时使用'
+ask() { [ "$NONINTERACTIVE" = 0 ] || die '此操作需要交互，请移除 --non-interactive'; printf '%s%s%s' "$C_TITLE" "$1" "$C_RESET" >&2; IFS= read -r ANSWER || die '输入结束，安装已取消'; }
+# Treat either credential file as an existing account, even if it is expired or damaged.
+# Local files cannot prove that Telegram still authorizes a session.
+has_login() { [ -f "$1/config.json" ] || [ -f "$1/gotd-session.json" ]; }
+next_account_root() {
+  local parent candidate n
+  parent=$(dirname -- "$ROOT"); candidate="$parent/account-2"; n=2
+  while [ -e "$candidate" ]; do n=$((n+1)); candidate="$parent/account-$n"; done
+  printf '%s' "$candidate"
+}
+prompt_migration() {
   info '迁移到 laowangbot：无需手动复制配置、会话和数据。'
-  ui "$C_OK" '1) mibot-lite'
-  ui "$C_OK" '2) MiBox'
-  ui "$C_OK" '3) TeleBox'
-  warn '0) 取消'
+  ui "$C_OK" '1) mibot-lite'; ui "$C_OK" '2) MiBox'; ui "$C_OK" '3) TeleBox'; warn '0) 取消'
   ask '请选择旧人形 [1-3]：'
   case "$ANSWER" in 1) FROM=mibot-lite;; 2) FROM=mibox;; 3) FROM=telebox;; *) die '已取消，未更改旧部署';; esac
   case "$FROM" in mibot-lite) SUGGESTED="$HOME/mibot-lite";; mibox) SUGGESTED="$HOME/mibot";; telebox) SUGGESTED="$HOME/TeleBox";; esac
   ask "旧部署目录（包含 config.json）[$SUGGESTED]："
   MIGRATE=${ANSWER:-$SUGGESTED}
+}
+if [ "$WIZARD" = 1 ]; then
+  [ -z "$MIGRATE$RESTORE" ] || die '--wizard 不能和 --migrate / --restore 同时使用'
+  [ "$NONINTERACTIVE" = 0 ] || die '--wizard 不能和 --non-interactive 同时使用'
+  prompt_migration
+elif [ -z "$MIGRATE$RESTORE" ] && [ "$INTERACTIVE" = 1 ] && [ "$NONINTERACTIVE" = 0 ]; then
+  info '请选择安装方式：'; ui "$C_OK" '1) 全新安装'; ui "$C_OK" '2) 从旧部署迁移'; warn '0) 取消'
+  ask '请选择 [1-2]：'
+  case "$ANSWER" in 1) ;; 2) prompt_migration;; *) die '已取消，未更改部署';; esac
 fi
 if [ -n "$MIGRATE" ]; then
   [ -d "$MIGRATE" ] && [ -f "$MIGRATE/config.json" ] || die '旧部署目录不存在或缺少 config.json'
   MIGRATE=$(cd -- "$MIGRATE" && pwd -P)
 fi
 case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT";; esac
+if [ -z "$MIGRATE$RESTORE" ] && [ "$INTERACTIVE" = 1 ] && [ "$NONINTERACTIVE" = 0 ] && has_login "$ROOT"; then
+  info '检测到目标目录已有登录信息。'
+  ui "$C_OK" '1) 新目录多开（保留当前账号）'; ui "$C_OK" '2) 覆盖登录（保留插件数据）'; warn '0) 取消'
+  ask '请选择 [1-2]：'
+  case "$ANSWER" in
+    1)
+      DEFAULT_ROOT=$(next_account_root); ask "新账号目录 [$DEFAULT_ROOT]："
+      NEW_ROOT=${ANSWER:-$DEFAULT_ROOT}; case "$NEW_ROOT" in /*) ROOT=$NEW_ROOT;; *) ROOT="$PWD/$NEW_ROOT";; esac
+      [ ! -e "$ROOT" ] || { [ -d "$ROOT" ] && [ -z "$(ls -A "$ROOT")" ]; } || die '新账号目录必须不存在或为空'
+      DEFAULT_SERVICE=$(basename -- "$ROOT" | LC_ALL=C tr -c 'A-Za-z0-9_.-' '-')
+      DEFAULT_SERVICE="laowangbot-${DEFAULT_SERVICE}"
+      ask "新账号服务名 [$DEFAULT_SERVICE]："; SERVICE_NAME=${ANSWER:-$DEFAULT_SERVICE}
+      ;;
+    2) RELOGIN=1;;
+    *) die '已取消，未更改部署';;
+  esac
+fi
+[[ "$SERVICE_NAME" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || die 'Service name must start with a letter, number or _ and contain only letters, numbers, . _ -'
+case "$SERVICE_NAME" in *.service) die 'Service name must omit the .service suffix';; esac
+SERVICE_UNIT="$SERVICE_NAME.service"
+LAUNCH_LABEL=io.github.laowangbot
+[ "$SERVICE_NAME" = laowangbot ] || LAUNCH_LABEL="io.github.laowangbot.$SERVICE_NAME"
+if [ "$RELOGIN" = 1 ] && { [ -e "$ROOT/.compiled/pending" ] || [ -L "$ROOT/.compiled/pending" ]; }; then
+  die '存在未完成的源码更新，请先使用原部署程序恢复该事务，再覆盖登录。'
+fi
 # Official binaries cannot preserve locally compiled plugins.
-if [ -e "$ROOT/.compiled/current.json" ] || { [ -d "$ROOT/plugins" ] && [ -n "$(ls -A "$ROOT/plugins")" ]; }; then
+if { [ "$RELOGIN" = 0 ] || [ ! -x "$ROOT/laowangbot" ]; } && { [ -e "$ROOT/.compiled/current.json" ] || { [ -d "$ROOT/plugins" ] && [ -n "$(ls -A "$ROOT/plugins")" ]; }; }; then
   die '部署包含插件或源码构建记录，拒绝覆盖。请使用 .update run，或停止服务后运行 laowangbot --source-update TAG --root DIR；源码回滚使用 --source-rollback。'
 fi
 # Service formats have expansion syntax; reject it before any changes.
@@ -172,7 +209,7 @@ if [ -n "$MIGRATE" ]; then
     select_source_service
   elif [ "$SOURCE_ALREADY_STOPPED" = 1 ]; then
     warn '请确保旧实例及其 Docker/PM2/其他启动器的自启动均已禁用。'
-  elif [ "$WIZARD" = 1 ]; then
+  elif [ "$INTERACTIVE" = 1 ] || [ "$WIZARD" = 1 ]; then
     warn '请先停止旧实例，并禁用其 Docker/PM2/launchd 等启动器的自动启动。'
     ui "$C_OK" '1) 已停止并禁用自动启动，继续迁移'
     warn '0) 取消'
@@ -182,10 +219,11 @@ if [ -n "$MIGRATE" ]; then
     die '请先停止旧实例并禁用自启动，然后加 --source-stopped 重试'
   fi
 fi
-WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0; TARGET_START_ATTEMPTED=0
+WORK=$(mktemp -d); CHANGED=0; STOPPED=0; SUCCESS=0; HAD_BINARY=0; HAD_UNIT=0; UNIT_CHANGED=0; TARGET_START_ATTEMPTED=0; ACCOUNT_CHANGED=0; BRAND_CHANGED=0
 UNIT=/etc/systemd/system/$SERVICE_UNIT
 [ "$OS" != darwin ] || UNIT="$HOME/Library/LaunchAgents/$LAUNCH_LABEL.plist"
 service_stop() { if [ "$OS" = linux ]; then systemctl stop "$SERVICE_UNIT"; else launchctl bootout "gui/$(id -u)" "$UNIT"; fi; }
+service_resume() { if [ "$OS" = linux ]; then systemctl start "$SERVICE_UNIT"; else launchctl bootstrap "gui/$(id -u)" "$UNIT"; fi; }
 service_start() { if [ "$OS" = linux ]; then systemctl daemon-reload && systemctl enable --now "$SERVICE_UNIT" && systemctl is-active --quiet "$SERVICE_UNIT"; else launchctl bootstrap "gui/$(id -u)" "$UNIT"; fi; }
 reject_other_services() {
   if [ "$OS" = linux ]; then
@@ -212,15 +250,28 @@ reject_other_services() {
 cleanup() {
   rc=$?; SAFE_TO_RESUME=1
   if [ "$SUCCESS" = 0 ]; then
-    if [ "$CHANGED" = 1 ]; then
-      if [ "$TARGET_START_ATTEMPTED" = 1 ]; then
-        service_stop >/dev/null 2>&1 || SAFE_TO_RESUME=0
-        if [ "$OS" = linux ] && [ "$SAFE_TO_RESUME" = 1 ]; then
-          target_state=$(systemctl show "$SERVICE_UNIT" -p ActiveState --value) || SAFE_TO_RESUME=0
-          case "$target_state" in inactive|failed) ;; *) SAFE_TO_RESUME=0;; esac
-        fi
+    if [ "$TARGET_START_ATTEMPTED" = 1 ]; then
+      service_stop >/dev/null 2>&1 || SAFE_TO_RESUME=0
+      if [ "$OS" = linux ] && [ "$SAFE_TO_RESUME" = 1 ]; then
+        target_state=$(systemctl show "$SERVICE_UNIT" -p ActiveState --value) || SAFE_TO_RESUME=0
+        case "$target_state" in inactive|failed) ;; *) SAFE_TO_RESUME=0;; esac
       fi
-      if [ "$HAD_BINARY" = 1 ]; then cp "$WORK/previous" "$ROOT/laowangbot"; else rm -f "$ROOT/laowangbot"; fi
+    fi
+    if [ "$SAFE_TO_RESUME" = 1 ]; then
+      if [ "$ACCOUNT_CHANGED" = 1 ]; then
+        for account_file in config.json gotd-session.json updates.json; do
+          if [ -f "$WORK/account/$account_file" ]; then cp -p "$WORK/account/$account_file" "$ROOT/$account_file"; else rm -f "$ROOT/$account_file"; fi
+        done
+      fi
+      if [ "$BRAND_CHANGED" = 1 ]; then
+        if [ -f "$WORK/brand.json" ]; then cp -p "$WORK/brand.json" "$ROOT/data/brand.json"; else rm -f "$ROOT/data/brand.json"; fi
+      fi
+      if [ "$CHANGED" = 1 ]; then
+        if [ "$HAD_BINARY" = 1 ]; then cp "$WORK/previous" "$ROOT/laowangbot"; else rm -f "$ROOT/laowangbot"; fi
+      fi
+    else
+      error '无法确认新服务已停止，未还原账号或程序，请手动检查服务和部署目录。'
+      cp -R "$WORK" "$ROOT/.install-recovery" || error '无法保存恢复文件'
     fi
     if [ "$UNIT_CHANGED" = 1 ]; then
       if [ "$HAD_UNIT" = 1 ]; then cp "$WORK/unit" "$UNIT"; else rm -f "$UNIT"; fi
@@ -242,7 +293,7 @@ cleanup() {
         error "无法确认新服务已停止，未恢复旧服务 ${source_unit}，避免双实例运行。"
       fi
     done
-    [ "$STOPPED" = 0 ] || service_start || error '旧服务恢复失败，请检查服务日志'
+    [ "$STOPPED" = 0 ] || [ "$SAFE_TO_RESUME" = 0 ] || service_resume || error '旧服务恢复失败，请检查服务日志'
   fi
   rm -rf "$WORK"
   exit "$rc"
@@ -250,7 +301,9 @@ cleanup() {
 trap cleanup EXIT
 if [ "$SERVICE" = 1 ]; then reject_other_services; fi
 info "准备 laowangbot 安装文件…"
-if [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
+if [ "$RELOGIN" = 1 ] && [ -x "$ROOT/laowangbot" ]; then
+  cp "$ROOT/laowangbot" "$WORK/new"
+elif [ -n "$BINARY" ]; then cp "$BINARY" "$WORK/new"; else
   ASSET=laowangbot-$OS-$ARCH
   if [ "$VERSION" = latest ]; then BASE="https://github.com/$REPO/releases/latest/download"; else BASE="https://github.com/$REPO/releases/download/$VERSION"; fi
   curl -fLsS "$BASE/$ASSET" -o "$WORK/new"
@@ -312,10 +365,49 @@ mkdir -p "$ROOT"
 [ -z "$MIGRATE" ] || info "正在迁移 $FROM 配置、会话和数据…"
 [ -z "$MIGRATE" ] || "$WORK/new" --migrate "$MIGRATE" --from "$FROM" --root "$ROOT"
 [ -z "$RESTORE" ] || "$WORK/new" --restore "$RESTORE" --root "$ROOT"
-if [ ! -f "$ROOT/config.json" ]; then
-  if [ -t 0 ]; then "$WORK/new" --login --root "$ROOT"; else die "Login required: run installer in a terminal, or migrate an existing account"; fi
+if [ "$RELOGIN" = 1 ] && [ "$SERVICE" = 1 ] && [ "$HAD_UNIT" = 1 ]; then
+  if [ "$OS" = linux ]; then
+    if systemctl is-active --quiet "$SERVICE_UNIT"; then service_stop; STOPPED=1; fi
+  elif launchctl print "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1; then service_stop; STOPPED=1; fi
+fi
+if [ "$RELOGIN" = 1 ] || [ ! -f "$ROOT/config.json" ]; then
+  [ "$INTERACTIVE" = 1 ] && [ "$NONINTERACTIVE" = 0 ] || die 'Login required: run installer in a terminal, or migrate an existing account'
+  mkdir -p "$WORK/account"
+  for account_file in config.json gotd-session.json updates.json; do
+    [ ! -f "$ROOT/$account_file" ] || cp -p "$ROOT/$account_file" "$WORK/account/$account_file"
+  done
+  ACCOUNT_CHANGED=1
+  if [ "$RELOGIN" = 1 ]; then "$WORK/new" --login --force --root "$ROOT"; else "$WORK/new" --login --root "$ROOT"; fi
+  rm -f "$ROOT/updates.json"
 fi
 "$WORK/new" --check --root "$ROOT"
+if [ "$INTERACTIVE" = 1 ] && [ "$NONINTERACTIVE" = 0 ]; then
+  ask '机器人显示名称（最多 32 个字符，回车保留当前名称；新安装默认 laowangbot）：'
+  BRAND=$ANSWER
+  if [ -n "$BRAND" ]; then
+    BRAND="${BRAND#"${BRAND%%[![:space:]]*}"}"
+    BRAND="${BRAND%"${BRAND##*[![:space:]]}"}"
+    [ -n "$BRAND" ] || die '机器人名称不能为空白'
+    # Count UTF-8 leading bytes so a C locale cannot split a Chinese character or emoji.
+    BRAND=$(printf '%s' "$BRAND" | LC_ALL=C awk 'BEGIN { FS="" } { for (i=1; i<=NF; i++) { if ($i !~ /[\200-\277]/ && ++n>32) break; printf "%s", $i } }')
+    BRAND="${BRAND%"${BRAND##*[![:space:]]}"}"
+    [[ "$BRAND" != *[[:cntrl:]]* ]] || die '机器人名称不能包含控制字符'
+    # JSON-escape without adding Python, Node.js or jq as an installation dependency.
+    BRAND=${BRAND//\\/\\\\}; BRAND=${BRAND//\"/\\\"}; BRAND=${BRAND//$'\t'/\\t}
+    mkdir -p "$ROOT/data"
+    [ ! -f "$ROOT/data/brand.json" ] || cp -p "$ROOT/data/brand.json" "$WORK/brand.json"
+    BRAND_CHANGED=1
+    printf '{"name":"%s"}\n' "$BRAND" > "$ROOT/data/.brand-install.json"
+    mv "$ROOT/data/.brand-install.json" "$ROOT/data/brand.json"
+  fi
+fi
+if [ "$RELOGIN" = 1 ] && [ -x "$ROOT/laowangbot" ]; then
+  if [ "$SERVICE" = 1 ] && [ "$HAD_UNIT" = 1 ]; then TARGET_START_ATTEMPTED=1; service_resume; fi
+  SUCCESS=1
+  success "账号登录已更新：$ROOT；插件数据已保留。"
+  warn '请在新账号的 Telegram 收藏夹执行 .ping 确认连接。'
+  exit 0
+fi
 if [ "$SERVICE" = 1 ] && [ "$HAD_UNIT" = 1 ]; then
   if [ "$OS" = linux ]; then
     if systemctl is-active --quiet "$SERVICE_UNIT"; then service_stop; STOPPED=1; fi

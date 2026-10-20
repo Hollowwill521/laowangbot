@@ -23,6 +23,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 
 命令要求对应 Release 构件和 `checksums.txt` 已上传；尚未发布或需要本地构建时，使用下方的 `--binary` / `-Binary` 安装方式。多账号部署时，为每个账号指定不同的 `--root` 和 `--service-name`（Windows 使用 `-Root` 和 `-ServiceName`）。
 
+在终端运行时，安装器先询问“全新安装”或“从旧部署迁移”。全新安装检测到目标目录的 `config.json` 或 `gotd-session.json` 后提供两种选择：
+
+- **新目录多开**：输入空的新目录，默认给出原目录旁未占用的 `account-2`，已存在则递增；服务名默认由新目录名生成，可自行修改。原账号继续运行，新账号使用独立配置和插件数据。
+- **覆盖登录**：停止所选服务，使用目标目录内当前程序重新登录，保留 `data/`、`state/`、`plugins/` 和编译记录。仅账号会话被替换，旧账号的 `updates.json` 更新缓存会清除；登录、检查或恢复服务失败时回滚旧会话。覆盖登录不升级程序。
+
+登录或迁移后可输入机器人显示名称，例如 `sakurabot`，与 `.rename` 共用 `data/brand.json`，最长 32 个字符，超长截取。回车保留当前设置，新安装默认 `laowangbot`。这是 `.status`、`.sysinfo` 等处的品牌名；Telegram 账号昵称、`app_name` 设备名称、可执行文件名和服务名各自独立。
+
+只需升级程序并保留账号时，Unix 安装命令增加 `--non-interactive`，Windows 增加 `-NonInteractive`，跳过安装方式、换号和品牌名询问；必须已有可用配置。原 `--wizard` / `-Wizard` 仍直接进入迁移向导。
+
 ## 1. 构建与首次登录
 
 在源码目录执行：
@@ -83,7 +92,7 @@ Get-ScheduledTask -TaskName laowangbot
 
 直接 `go build` 的版本显示为 `dev`；正式构件用 `scripts/release.sh` 注入版本。安装器创建当前用户登录时运行的计划任务，任务运行 `--supervise`；多账号时为每个账号指定不同的 `-ServiceName`。这不是 Windows 系统服务；`-NoService` 只安装，随后手动启动。脚本执行权限遵循本机策略。
 
-更新时重新运行上述安装命令，安装器停止旧任务并确认可执行文件不再运行后替换。回滚使用：
+更新时在上述安装命令增加 `-NonInteractive`，安装器停止旧任务并确认可执行文件不再运行后替换。回滚使用：
 
 ```powershell
 .\scripts\install.ps1 -Root "$env:LOCALAPPDATA\laowangbot" -ServiceName laowangbot -Rollback
@@ -120,7 +129,7 @@ docker run -d --name laowangbot --restart unless-stopped   -v laowangbot-data:/d
 
 ## 7. 更新与回滚
 
-本地安装可反复使用 `--binary` / `-Binary`，保留配置并留存上一二进制。Linux/macOS 在有有效 Release 后可使用 `.update check`、`.update run`、`.update rollback`，需要校验文件和可重启运行方式。未发布时查询或下载可能失败，不代表已经存在可升级版本。
+本地更新可使用 `--binary PATH --non-interactive` / `-Binary PATH -NonInteractive`，保留账号配置并留存上一二进制。Linux/macOS 在有有效 Release 后可使用 `.update check`、`.update run`、`.update rollback`，需要校验文件和可重启运行方式。未发布时查询或下载可能失败，不代表已经存在可升级版本。
 
 维护者执行 `bash scripts/release.sh vX.Y.Z` 会构建 Linux/macOS/Windows 的 amd64、arm64 构件及 `checksums.txt`，不会主动发布。发布工作流会在推送版本标签后构建并上传 Release 构件；下载式安装脚本校验 SHA-256。`--binary` 是用户明确选择的可信本地文件。Docker 目前没有公共镜像，使用源码构建。
 

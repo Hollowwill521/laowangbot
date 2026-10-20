@@ -1,5 +1,14 @@
 # 验证记录
 
+## 0.2.4 安装向导与 PR #9 验证（2026-10-20）
+
+- Go 全套单元测试、race、integration 标签集成测试及 `go vet ./...` 均通过。
+- 覆盖率检查通过，本次本地测试副本的 Go 总体语句覆盖率为 **23.6%**；不包含 Shell/PowerShell 行覆盖率。
+- `tests/deployment/install_wizard_test.py` 的 58 项用例通过，包含终端中的新装、多开、换号、保留编译插件、名称转义与 UTF-8 截断、非交互更新、失败恢复，以及真实 v0.2.4 二进制的离线迁移和配置检查。PowerShell 使用 macOS 上的 7.6.7 运行时执行。
+- `tests/deployment/multiselect_test.py` 的 16 项迁移回归通过；ShellCheck、Shell/PowerShell 语法和 gofmt 检查通过。
+- PR #9 的新增回归在合并前复现纯文本跳过问题，合并后验证 48 小时时限、转发、贴纸、网页预览和普通图片的处理规则。
+- 本地构建输出版本确认为 `v0.2.4`。测试依照仓库规则仅在本地保留。systemd 和计划任务操作使用模拟实现；未在目标 Linux/Windows 上部署，也未使用真实 Telegram 账号验证换号或纯文本替换占位图。
+
 ## 0.2.3 PR #8 合并与发布验证（2026-10-16）
 
 - `go test -count=1 ./...`、`go test -race -count=1 ./...`、`go test -tags=integration -count=1 ./...` 均通过。

@@ -12,7 +12,7 @@
 
 ### 全新安装（需要登录）
 
-首次安装和运行官方二进制无需 Go 或 Node.js；管理源码插件及源码升级需要 Go 和 Git。安装器下载最新官方 Release 并校验 SHA-256，交互登录后启动后台任务。命令要求 Release 已包含对应平台构件与 `checksums.txt`；尚未发布时请使用下面的源码方式。
+首次安装和运行官方二进制无需 Go 或 Node.js；管理源码插件及源码升级需要 Go 和 Git。安装器先让你选择全新安装或迁移，再下载官方 Release 并校验 SHA-256，完成登录后启动后台任务。命令要求 Release 已包含对应平台构件与 `checksums.txt`；尚未发布时请使用下面的源码方式。
 
 ```sh
 # Linux
@@ -29,6 +29,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/laowangbot/master
 
 Linux 使用 systemd，macOS 使用当前用户 launchd，Windows 使用当前用户登录计划任务。安装成功后在收藏夹执行 `.ping`、`.help` 验证连接；登录需要自己的 Telegram API ID、API hash、手机号和验证码。完整参数见 [安装指南](INSTALL.md)。
 
+选择全新安装时，若目标目录已有账号配置或会话，安装器会询问“新目录多开”还是“覆盖登录”。多开会提示输入新目录和独立服务名，默认使用原目录旁未占用的 `account-2`（已存在则递增）；覆盖登录使用当前程序替换账号会话，保留插件源码、编译记录、配置和状态。随后可输入显示名称，例如 `sakurabot`，与 `.rename sakurabot` 共用 `data/brand.json`；回车保留当前名称，新安装默认 `laowangbot`。
+
 同一台服务器可运行多个账号：每个账号使用不同的 `--root` 和 `--service-name`，分别登录即可。Linux 示例：
 
 ```sh
@@ -40,7 +42,7 @@ sudo bash -c 'bash <(curl -fsSL https://raw.githubusercontent.com/OrionG-hub/lao
 
 ### 从旧人形一键迁移（无需复制配置）
 
-已有 mibot-lite、MiBox 或 TeleBox？使用以下迁移命令，**不要使用上方的新安装命令**。选择旧人形和旧目录后，脚本自动搬迁配置、会话及已支持的数据；旧会话有效时无需重新输入 API ID 或登录。
+已有 mibot-lite、MiBox 或 TeleBox？在上述安装菜单选择“从旧部署迁移”，或使用以下命令直接进入迁移向导。选择旧人形和旧目录后，脚本自动搬迁配置、会话及已支持的数据；旧会话有效时无需重新输入 API ID 或登录。
 
 ```sh
 # Linux
