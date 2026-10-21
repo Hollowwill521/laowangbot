@@ -106,5 +106,5 @@ func status(ctx context.Context, a *app.App, registry *command.Registry, inv *co
 	} else {
 		inv.Log.Warn("status.card_render_failed", "error", err.Error())
 	}
-	return inv.Edit(ctx, "<b>"+brand.Get()+" 状态</b>\n\n"+caption)
+	return inv.Edit(ctx, "<b>"+command.Escape(brand.Get())+" 状态</b>\n\n"+caption)
 }

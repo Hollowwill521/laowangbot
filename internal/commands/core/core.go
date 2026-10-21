@@ -64,7 +64,7 @@ func Register(a *app.App) {
 				"CPU: " + command.Code(fmt.Sprintf("%d 核", machine.CPUs)),
 				"系统内存: " + command.Code(fmt.Sprintf("%.2f / %.2f MB", sysinfo.Megabytes(machine.TotalMemory-machine.FreeMemory), sysinfo.Megabytes(machine.TotalMemory))),
 				"",
-				"<b>" + brand.Get() + " 进程</b>",
+				"<b>" + command.Escape(brand.Get()) + " 进程</b>",
 				"Go: " + command.Code(runtime.Version()),
 				"PID: " + command.Code(fmt.Sprint(os.Getpid())),
 				"RSS: " + command.Code(fmt.Sprintf("%.2f MB", sysinfo.Megabytes(process.RSS))),
@@ -90,8 +90,8 @@ func Register(a *app.App) {
 
 func versionText(a *app.App) string {
 	return strings.Join([]string{
-		"<b>" + brand.Get() + " 版本</b>", "",
-		brand.Get() + ": " + command.Code(kit.Version(a)),
+		"<b>" + command.Escape(brand.Get()) + " 版本</b>", "",
+		command.Escape(brand.Get()) + ": " + command.Code(kit.Version(a)),
 		"Go: " + command.Code(runtime.Version()),
 		"平台: " + command.Code(runtime.GOOS+" "+runtime.GOARCH),
 		"PID: " + command.Code(fmt.Sprint(os.Getpid())),

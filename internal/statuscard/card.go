@@ -1,7 +1,7 @@
 // Package statuscard 画 .status 的状态卡片：1600×900 的 PNG，布局和配色照 MiBox v2 的
 // status-card。只用 golang.org/x/image 的矢量光栅和字体渲染，不引入别的依赖；
-// 字体是 v2 附带的 Noto Sans SC 子集（73 KB，只含 ASCII、卡片上的标点和固定的中文标签，
-// SIL OFL 1.1，许可证见 NotoSansSC-OFL.txt）。卡片只在 .status 时画，画完就丢。
+// 字体是 v2 附带的 Noto Sans SC 子集，另配 Noto Sans Symbols 2 补齐用户品牌里的
+// 中文和 emoji（均为 SIL OFL 1.1，许可证见 NotoSansSC-OFL.txt）。卡片只在 .status 时画，画完就丢。
 package statuscard
 
 import (
@@ -23,8 +23,11 @@ import (
 	"golang.org/x/image/vector"
 )
 
-//go:embed NotoSansSC-status-subset.ttf
+//go:embed NotoSansCJKsc-Regular.otf
 var fontData []byte
+
+//go:embed NotoSansSymbols2-Regular.ttf
+var symbolFontData []byte
 
 const (
 	width  = 1600
@@ -51,12 +54,18 @@ type Card struct {
 
 var (
 	parsed     *sfnt.Font
+	symbols    *sfnt.Font
 	parseOnce  sync.Once
 	parseError error
 )
 
 func loadFont() (*sfnt.Font, error) {
-	parseOnce.Do(func() { parsed, parseError = opentype.Parse(fontData) })
+	parseOnce.Do(func() {
+		parsed, parseError = opentype.Parse(fontData)
+		if parseError == nil {
+			symbols, parseError = opentype.Parse(symbolFontData)
+		}
+	})
 	return parsed, parseError
 }
 
@@ -106,7 +115,19 @@ func Render(card Card) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &canvas{img: image.NewRGBA(image.Rect(0, 0, width, height)), font: face, faces: map[float64]font.Face{}}
+	buffer := &sfnt.Buffer{}
+	for _, value := range []string{card.Name, card.Footer} {
+		for _, r := range value {
+			glyph, _ := face.GlyphIndex(buffer, r)
+			if glyph == 0 {
+				glyph, _ = symbols.GlyphIndex(buffer, r)
+			}
+			if glyph == 0 {
+				return nil, fmt.Errorf("status font does not contain %U", r)
+			}
+		}
+	}
+	c := &canvas{img: image.NewRGBA(image.Rect(0, 0, width, height)), font: face, symbolFont: symbols, glyphBuffer: &sfnt.Buffer{}, faces: map[faceKey]font.Face{}}
 	defer c.close()
 
 	c.background()
@@ -161,14 +182,21 @@ const (
 )
 
 type canvas struct {
-	img   *image.RGBA
-	font  *sfnt.Font
-	faces map[float64]font.Face
+	img         *image.RGBA
+	font        *sfnt.Font
+	symbolFont  *sfnt.Font
+	glyphBuffer *sfnt.Buffer
+	faces       map[faceKey]font.Face
 	// size 是 fitted 最后选定的字号，text 用它。
 	size float64
 	// path 是共用的光栅器，pending 是正在拼的形状的子路径。
 	path    *vector.Rasterizer
 	pending [][][2]float64
+}
+
+type faceKey struct {
+	size    float64
+	symbols bool
 }
 
 func (c *canvas) close() {
@@ -360,22 +388,52 @@ func (c *canvas) gauge(x, y float64, label string, value Gauge, tone color.RGBA)
 }
 
 func (c *canvas) face(size float64) font.Face {
-	if face, ok := c.faces[size]; ok {
+	return c.faceFor(size, false)
+}
+
+func (c *canvas) faceFor(size float64, symbols bool) font.Face {
+	key := faceKey{size: size, symbols: symbols}
+	if face, ok := c.faces[key]; ok {
 		return face
 	}
-	face, err := opentype.NewFace(c.font, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingNone})
+	f := c.font
+	if symbols {
+		f = c.symbolFont
+	}
+	face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingNone})
 	if err != nil {
 		return nil
 	}
-	c.faces[size] = face
+	c.faces[key] = face
 	return face
+}
+
+func (c *canvas) faceForRune(size float64, r rune) font.Face {
+	if glyph, _ := c.font.GlyphIndex(c.glyphBuffer, r); glyph != 0 {
+		return c.faceFor(size, false)
+	}
+	if c.symbolFont != nil {
+		glyph, _ := c.symbolFont.GlyphIndex(c.glyphBuffer, r)
+		if glyph != 0 {
+			return c.faceFor(size, true)
+		}
+	}
+	return c.faceFor(size, false)
+}
+
+func (c *canvas) measure(value string, size float64) fixed.Int26_6 {
+	var width fixed.Int26_6
+	for _, r := range value {
+		width += font.MeasureString(c.faceForRune(size, r), string(r))
+	}
+	return width
 }
 
 // fitted 从 maximum 往下每次减 2 找一个放得下的字号；到 minimum 还放不下就截断加省略号。
 // 选定的字号记在 c.size 里，紧接着的 text 用它。
 func (c *canvas) fitted(value string, maxWidth, maximum, minimum float64) string {
 	for size := maximum; size >= minimum; size -= 2 {
-		if face := c.face(size); face != nil && float64(font.MeasureString(face, value).Round()) <= maxWidth {
+		if face := c.face(size); face != nil && float64(c.measure(value, size).Round()) <= maxWidth {
 			c.size = size
 			return value
 		}
@@ -383,7 +441,7 @@ func (c *canvas) fitted(value string, maxWidth, maximum, minimum float64) string
 	c.size = minimum
 	face := c.face(minimum)
 	runes := []rune(value)
-	for len(runes) > 0 && face != nil && float64(font.MeasureString(face, string(runes)+"…").Round()) > maxWidth {
+	for len(runes) > 0 && face != nil && float64(c.measure(string(runes)+"…", minimum).Round()) > maxWidth {
 		runes = runes[:len(runes)-1]
 	}
 	return string(runes) + "…"
@@ -398,9 +456,13 @@ func (c *canvas) text(value string, x, y float64, tone color.RGBA, align alignme
 	metrics := face.Metrics()
 	baseline := y + float64(metrics.Ascent-metrics.Descent)/64/2
 	if align == alignCenter {
-		x -= float64(font.MeasureString(face, value)) / 64 / 2
+		x -= float64(c.measure(value, c.size)) / 64 / 2
 	}
-	drawer := font.Drawer{Dst: c.img, Src: image.NewUniform(tone), Face: face,
-		Dot: fixed.Point26_6{X: fixed.Int26_6(x * 64), Y: fixed.Int26_6(baseline * 64)}}
-	drawer.DrawString(value)
+	dot := fixed.Point26_6{X: fixed.Int26_6(x * 64), Y: fixed.Int26_6(baseline * 64)}
+	for _, r := range value {
+		glyph := c.faceForRune(c.size, r)
+		drawer := font.Drawer{Dst: c.img, Src: image.NewUniform(tone), Face: glyph, Dot: dot}
+		drawer.DrawString(string(r))
+		dot.X += font.MeasureString(glyph, string(r))
+	}
 }
