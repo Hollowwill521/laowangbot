@@ -12,6 +12,7 @@ import (
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
 	"github.com/OrionG-hub/laowangbot/internal/backup"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 )
@@ -34,7 +35,7 @@ func backupCaption(version string, names []string, size int) string {
 	for index, name := range listed {
 		quoted[index] = command.Escape(name)
 	}
-	return "📦 <b>laowangbot 配置备份</b> · " + command.Escape(version) + "\n" +
+	return "📦 <b>" + command.Escape(brand.Get()) + " 配置备份</b> · " + command.Escape(version) + "\n" +
 		strconv.Itoa(len(names)) + " 个文件，" + command.Escape(kit.FormatBytes(size)) + "：" +
 		strings.Join(quoted, "、") + more + "\n\n" +
 		"⚠️ <b>这个文件就是你的账号</b>：里面有登录会话和各命令的 API 密钥。不要转发给任何人。\n\n" +

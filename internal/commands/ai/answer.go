@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/bot"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/httpx"
@@ -282,7 +283,7 @@ func telegraphMarkdown(question, answer string, sources []aiSource) string {
 func (s *Service) publish(ctx context.Context, cfg aiConfig, question, answer string, sources []aiSource) (string, error) {
 	token := cfg.TelegraphToken
 	if token == "" {
-		account, err := s.telegraphPost(ctx, cfg, "createAccount", map[string]any{"short_name": "laowangbotAI", "author_name": "laowangbot"})
+		account, err := s.telegraphPost(ctx, cfg, "createAccount", map[string]any{"short_name": "laowangbotAI", "author_name": brand.Get()})
 		if err != nil {
 			return "", err
 		}

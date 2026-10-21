@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/OrionG-hub/laowangbot/internal/app"
+	"github.com/OrionG-hub/laowangbot/internal/brand"
 	"github.com/OrionG-hub/laowangbot/internal/command"
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/OrionG-hub/laowangbot/internal/commands/restart"
@@ -39,6 +40,7 @@ var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 // Register 注册 .update。
 func Register(a *app.App) {
 	repo := a.Env.Get("LAOWANGBOT_UPDATE_REPO", "OrionG-hub/laowangbot")
+	productName := func() string { return command.Escape(brand.Get()) }
 	a.Registry.Register(&command.Command{Name: "update", Description: "检查版本，无插件下载更新，有插件保留源码编译", Usage: "[check|run|rollback]", Timeout: 30 * time.Minute,
 		Help: func(prefix string) string {
 			return "<b>程序更新</b>\n" + command.Code(prefix+"update") + " 当前版本与回滚状态\n" + command.Code(prefix+"update check") + " 读取 GitHub Releases 检查新版本\n" +
@@ -67,7 +69,7 @@ func Register(a *app.App) {
 				}
 				return inv.Edit(ctx, strings.Join(rows, "\n"))
 			case "check":
-				if err := inv.Edit(ctx, "<b>laowangbot 更新</b>\n正在读取发布信息…"); err != nil {
+				if err := inv.Edit(ctx, "<b>"+productName()+" 更新</b>\n正在读取发布信息…"); err != nil {
 					return err
 				}
 				latest, err := fetchRelease(ctx, repo)
@@ -102,7 +104,7 @@ func Register(a *app.App) {
 				if err := builder.Rollback(ctx); err != nil {
 					return err
 				}
-				return restart.Now(ctx, inv, "rollback", "<b>laowangbot 回滚</b>\n已换回上一版本，正在重启…", "回滚后重启失败。")
+				return restart.Now(ctx, inv, "rollback", "<b>"+productName()+" 回滚</b>\n已换回上一版本，正在重启…", "回滚后重启失败。")
 			}
 			return inv.EditText(ctx, "用法："+inv.Prefix+"update [check|run|rollback]")
 		}})
@@ -201,7 +203,7 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 		if err = replaceOfficialBinary(ctx, a.Root, binary, latest); err != nil {
 			return inv.EditText(ctx, buildFailure(err))
 		}
-		return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已校验并安装 "+command.Escape(latest.TagName)+" 官方二进制，正在重启…", "更新后重启失败，请手动重启服务。")
+		return restart.Now(ctx, inv, "update", "<b>"+command.Escape(brand.Get())+" 更新</b>\n已校验并安装 "+command.Escape(latest.TagName)+" 官方二进制，正在重启…", "更新后重启失败，请手动重启服务。")
 	}
 	if err = inv.EditText(ctx, "正在获取 "+latest.TagName+" 源码，保留已安装插件并限流编译主程序；首次编译可能较慢…"); err != nil {
 		return err
@@ -210,7 +212,7 @@ func runUpdate(ctx context.Context, a *app.App, inv *command.Invocation, repo, b
 	if err = builder.Update(ctx, latest.TagName); err != nil {
 		return inv.EditText(ctx, buildFailure(err))
 	}
-	return restart.Now(ctx, inv, "update", "<b>laowangbot 更新</b>\n已编译安装 "+command.Escape(latest.TagName)+"，本地插件源码已保留，正在重启…", "更新后重启失败，请手动重启服务。")
+	return restart.Now(ctx, inv, "update", "<b>"+command.Escape(brand.Get())+" 更新</b>\n已编译安装 "+command.Escape(latest.TagName)+"，本地插件源码已保留，正在重启…", "更新后重启失败，请手动重启服务。")
 }
 
 func buildFailure(err error) string {
