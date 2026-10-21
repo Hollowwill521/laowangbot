@@ -12,6 +12,6 @@
 
 全局普通/归档各最多扫描 500 个会话，每会话最多 80 条；普通数量模式连续三页没有自己的消息时停止。仅处理命令开始前的消息，拒绝跨聊天回复和冲突参数。转发、贴纸、网页预览及超过 48 小时的媒体不替换。替换失败仍尝试删除并报告；取消后不继续修改消息。
 
-原占位图路径为 `<root>/data/dme/dme_troll_image.png`，从 MiBot Lite 迁移的 `data/` 会原样保留。图片不存在或不可读时会明确报告，跳过媒体替换但仍删除。配置沿用 `data/dme.json`；已有 `.d → dme` 别名继续由 `data/alias.json` 保留，不覆盖用户别名。
+默认占位图随程序发布，文件为 `internal/commands/dme/dme_troll_image.png` 并嵌入二进制；旧部署中的 `<root>/data/dme/dme_troll_image.png` 仅供本地测试构造使用。配置沿用 `data/dme.json`；已有 `.d → dme` 别名继续由 `data/alias.json` 保留，不覆盖用户别名。
 
 测试使用模拟 Telegram RPC，包括真实 TL 编解码；不以真实历史聊天作为删除测试数据。

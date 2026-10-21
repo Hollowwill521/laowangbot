@@ -3,10 +3,10 @@ package dme
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -18,6 +18,12 @@ import (
 	"github.com/OrionG-hub/laowangbot/internal/commands/kit"
 	"github.com/gotd/td/tg"
 )
+
+// defaultImage is shipped with the binary so releases carry the same DME image
+// to every deployment instead of relying on an ignored data/ file.
+//
+//go:embed dme_troll_image.png
+var defaultImage []byte
 
 type dmeConfig struct {
 	BatchSize     int `json:"batchSize"`
@@ -129,7 +135,7 @@ func Register(a *app.App) {
 			return err
 		}
 		cfg.normalize()
-		r, err := newRun(ctx, inv, cfg, filepath.Join(a.Root, "data", "dme", "dme_troll_image.png"))
+		r, err := newRun(ctx, inv, cfg, "")
 		if err != nil {
 			return err
 		}
@@ -156,6 +162,7 @@ type dmeRun struct {
 	peerID                                        string
 	cutoff                                        int
 	imagePath                                     string
+	imageData                                     []byte
 	matched, deleted, failed, edited, failedEdits int
 	scanFailed                                    int
 	missingImage                                  bool
@@ -170,7 +177,11 @@ func newRun(ctx context.Context, inv *command.Invocation, cfg dmeConfig, imagePa
 	if inv.Message.Raw != nil && inv.Message.Raw.Date > 0 && inv.Message.Raw.Date < cutoff {
 		cutoff = inv.Message.Raw.Date
 	}
-	return &dmeRun{ctx: ctx, inv: inv, client: inv.Client, api: inv.Client.API(), cfg: cfg, peer: p, peerID: bot.PeerID(inv.Message.Peer), cutoff: cutoff, imagePath: imagePath}, nil
+	imageData := defaultImage
+	if imagePath != "" {
+		imageData = nil
+	}
+	return &dmeRun{ctx: ctx, inv: inv, client: inv.Client, api: inv.Client.API(), cfg: cfg, peer: p, peerID: bot.PeerID(inv.Message.Peer), cutoff: cutoff, imagePath: imagePath, imageData: imageData}, nil
 }
 
 // Every retry checks cancellation before issuing any mutating RPC.
@@ -226,7 +237,11 @@ func (r *dmeRun) scrub(peer tg.InputPeerClass, m *tg.Message) error {
 	if err := r.ctx.Err(); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(r.imagePath)
+	data := r.imageData
+	var err error
+	if data == nil {
+		data, err = os.ReadFile(r.imagePath)
+	}
 	if err != nil || len(data) == 0 {
 		r.failedEdits++
 		r.missingImage = true
