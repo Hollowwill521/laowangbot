@@ -1,4 +1,4 @@
 // Package version provides the version for untagged source and Docker builds.
 package version
 
-const Current = "0.2.4"
+const Current = "0.2.5"
