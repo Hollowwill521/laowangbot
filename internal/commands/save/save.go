@@ -551,7 +551,7 @@ func (s *saver) download(ctx context.Context, source *bot.MediaSource) (string, 
 	if err := os.MkdirAll(s.partial, 0o700); err != nil {
 		return "", err
 	}
-	file, err := os.CreateTemp(s.partial, "part-*")
+	file, err := os.CreateTemp(s.partial, partialPattern(source))
 	if err != nil {
 		return "", err
 	}
@@ -570,6 +570,10 @@ func (s *saver) download(ctx context.Context, source *bot.MediaSource) (string, 
 		return "", err
 	}
 	return file.Name(), nil
+}
+
+func partialPattern(source *bot.MediaSource) string {
+	return "part-*" + localExtension(source)
 }
 
 // saveLocal 把消息的媒体写到 save/<chat>/ 下，旁边放一个 JSON 文件

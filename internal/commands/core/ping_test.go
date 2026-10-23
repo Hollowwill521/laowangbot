@@ -51,6 +51,13 @@ func TestProbeDCUsesPort80When443Fails(t *testing.T) {
 	}
 }
 
+func TestFormatDCLineUsesLocationWithoutIP(t *testing.T) {
+	line := formatDCLine(0, dcProbeResult{port: 443, ms: 106})
+	if line != "🌐 <b>DC1 (Miami):</b> <code>106ms</code>" {
+		t.Fatalf("formatDCLine() = %q", line)
+	}
+}
+
 type fakeConn struct{}
 
 func (fakeConn) Read([]byte) (int, error)           { return 0, errors.New("eof") }

@@ -48,6 +48,8 @@ API 凭据从 [my.telegram.org](https://my.telegram.org) 申请，登录交互�
 
 `--serve` 直接运行；`--supervise` 启动可移植监督进程，以支持重启和更新后的重新加载。部署目录与源码目录建议分开。
 
+`.eat`、`.eat2` 和 `.eatgif` 生成动画需要系统安装 `ffmpeg`。Linux 可执行 `sudo apt-get install -y ffmpeg`，macOS 可执行 `brew install ffmpeg`；安装后重启 laowangbot 服务。Docker 默认镜像已包含 ffmpeg。
+
 ## 2. Linux（systemd）
 
 在目标架构编译，或在构建机交叉编译：

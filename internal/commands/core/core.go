@@ -182,6 +182,8 @@ func pingHelp(prefix string) string {
 
 var dcTargets = []string{"149.154.175.53", "149.154.167.51", "149.154.175.100", "149.154.167.91", "91.108.56.130"}
 
+var dcLocations = []string{"Miami", "Amsterdam", "Miami", "Amsterdam", "Singapore"}
+
 type dcTarget struct {
 	all   bool
 	index int
@@ -242,17 +244,16 @@ func dcReport(ctx context.Context, target dcTarget) string {
 	lines = append(lines, "<b>Telegram 数据中心延迟</b>")
 	for _, index := range indices {
 		result := probeDC(ctx, dcTargets[index])
-		if result.err != nil {
-			lines = append(lines, fmt.Sprintf("DC%d %s：失败", index+1, result.err))
-			continue
-		}
-		method := fmt.Sprintf("TCP %d", result.port)
-		if result.port == 0 {
-			method = "系统 ping"
-		}
-		lines = append(lines, fmt.Sprintf("DC%d %s：%s，%d ms", index+1, dcTargets[index], method, result.ms))
+		lines = append(lines, formatDCLine(index, result))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatDCLine(index int, result dcProbeResult) string {
+	if result.err != nil {
+		return fmt.Sprintf("🌐 <b>DC%d (%s):</b> <code>超时</code>", index+1, dcLocations[index])
+	}
+	return fmt.Sprintf("🌐 <b>DC%d (%s):</b> <code>%dms</code>", index+1, dcLocations[index], result.ms)
 }
 
 // pingTarget 是 .ping 能测的目标：和 MiBox 一样只允许字母、数字和 . _ : -，最长 253 字符。
