@@ -4,7 +4,9 @@ package core
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -27,6 +29,9 @@ func Register(a *app.App) {
 			case target == "help" || target == "h":
 				return inv.Edit(ctx, pingHelp(inv.Prefix))
 			case target != "":
+				if dc, ok := parseDCTarget(target); ok {
+					return inv.Edit(ctx, dcReport(ctx, dc))
+				}
 				return inv.Edit(ctx, probe(ctx, target))
 			}
 			elapsed, err := inv.Client.Ping(ctx)
@@ -170,7 +175,84 @@ func lookupForHelp(registry *command.Registry, name string) (*command.Command, b
 func pingHelp(prefix string) string {
 	p := command.Escape(prefix)
 	return "🏓 <b>延迟测试</b>\n\n• <code>" + p + "ping</code> 测 Telegram 接口和消息编辑的延迟\n" +
+		"• <code>" + p + "ping dc</code> 测试 Telegram 五个数据中心\n" +
+		"• <code>" + p + "ping dc1</code> 测试单个数据中心\n" +
 		"• <code>" + p + "ping example.com</code> 对 https://example.com 发一次 HEAD 请求，显示状态码和耗时（5 秒超时）"
+}
+
+var dcTargets = []string{"149.154.175.53", "149.154.167.51", "149.154.175.100", "149.154.167.91", "91.108.56.130"}
+
+type dcTarget struct {
+	all   bool
+	index int
+}
+
+func parseDCTarget(target string) (dcTarget, bool) {
+	if target == "dc" || target == "all" {
+		return dcTarget{all: true}, true
+	}
+	if len(target) == 3 && target[:2] == "dc" && target[2] >= '1' && target[2] <= '5' {
+		return dcTarget{index: int(target[2] - '1')}, true
+	}
+	return dcTarget{}, false
+}
+
+type dcProbeResult struct {
+	port int
+	ms   int64
+	err  error
+}
+
+func probeDCWith(ctx context.Context, address string, dial func(context.Context, string, string) (net.Conn, error), fallback func(context.Context, string) (int64, error)) dcProbeResult {
+	for _, port := range []int{443, 80} {
+		started := time.Now()
+		conn, err := dial(ctx, "tcp", fmt.Sprintf("%s:%d", address, port))
+		if err == nil {
+			_ = conn.Close()
+			return dcProbeResult{port: port, ms: time.Since(started).Milliseconds()}
+		}
+	}
+	ms, err := fallback(ctx, address)
+	return dcProbeResult{ms: ms, err: err}
+}
+
+func probeDC(ctx context.Context, address string) dcProbeResult {
+	return probeDCWith(ctx, address, (&net.Dialer{}).DialContext, systemPing)
+}
+
+func systemPing(ctx context.Context, address string) (int64, error) {
+	started := time.Now()
+	name := "ping"
+	args := []string{"-c", "1", "-W", "2", address}
+	if runtime.GOOS == "windows" {
+		args = []string{"-n", "1", "-w", "2000", address}
+	}
+	if err := exec.CommandContext(ctx, name, args...).Run(); err != nil {
+		return 0, err
+	}
+	return time.Since(started).Milliseconds(), nil
+}
+
+func dcReport(ctx context.Context, target dcTarget) string {
+	indices := []int{target.index}
+	if target.all {
+		indices = []int{0, 1, 2, 3, 4}
+	}
+	lines := make([]string, 0, len(indices)+1)
+	lines = append(lines, "<b>Telegram 数据中心延迟</b>")
+	for _, index := range indices {
+		result := probeDC(ctx, dcTargets[index])
+		if result.err != nil {
+			lines = append(lines, fmt.Sprintf("DC%d %s：失败", index+1, result.err))
+			continue
+		}
+		method := fmt.Sprintf("TCP %d", result.port)
+		if result.port == 0 {
+			method = "系统 ping"
+		}
+		lines = append(lines, fmt.Sprintf("DC%d %s：%s，%d ms", index+1, dcTargets[index], method, result.ms))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // pingTarget 是 .ping 能测的目标：和 MiBox 一样只允许字母、数字和 . _ : -，最长 253 字符。

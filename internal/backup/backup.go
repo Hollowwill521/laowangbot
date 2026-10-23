@@ -3,13 +3,10 @@
 //
 // 哪些算配置，只在这里决定，别处不再定义：
 //
-//   - config.json 和 gotd-session.json：账号。有了它们，恢复出来的部署
-//     启动时不用重新登录。
-//   - .env：命令前缀和其他 MIBOT_* 设置。
 //   - data/*.json 和 state/<插件>/*.json：命令和插件配置，包括 API key。
 //   - state/pmcaptcha/legacy/*.json：尚未合并的迁移配置和记录。
 //
-// 其余的都是有意不带的。data/ 的子目录是缓存（eatgif 下载的帧、
+// 账号文件和 .env 有意不带。data/ 的子目录是缓存（eatgif 下载的帧、
 // Speedtest CLI），第一次用到时会自己补回来。updates.json 是某一台机器
 // 上连接的更新状态，带到另一台机器，只会让 Telegram 去重放一段根本
 // 不存在的缺口。程序本身从发布版本获取，不从备份里来。
@@ -73,11 +70,6 @@ func Create(root, version string, now time.Time) ([]byte, []string, error) {
 		return nil, nil, err
 	}
 	var names []string
-	for _, name := range rootFiles {
-		if regular(filepath.Join(root, name)) {
-			names = append(names, name)
-		}
-	}
 	for _, top := range []string{"data", "state"} {
 		base := filepath.Join(root, top)
 		err := filepath.WalkDir(base, func(full string, entry os.DirEntry, walkErr error) error {
@@ -225,6 +217,16 @@ func checkParents(root, name string) error {
 // 整个归档读完、检查完之前什么都不写，所以下载不完整，或者文件根本
 // 不是本程序的备份时，目录会原样保留。
 func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
+	return restore(archive, root, overwrite, false)
+}
+
+// RestorePlugins restores only plugin configuration archives. Account files are
+// rejected so an old full-account archive can never replace the active session.
+func RestorePlugins(archive io.Reader, root string) ([]string, error) {
+	return restore(archive, root, true, true)
+}
+
+func restore(archive io.Reader, root string, overwrite, pluginsOnly bool) ([]string, error) {
 	zipped, err := gzip.NewReader(archive)
 	if err != nil {
 		return nil, errors.New("not a laowangbot/mibot-lite backup: the file is not gzip")
@@ -266,6 +268,13 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 		if !allowed(header.Name) {
 			return nil, fmt.Errorf("the backup contains %q, which a laowangbot/mibot-lite backup never holds", header.Name)
 		}
+		if pluginsOnly {
+			for _, rootFile := range rootFiles {
+				if header.Name == rootFile {
+					return nil, errors.New("the backup contains account files; .hf accepts plugin configuration backups only")
+				}
+			}
+		}
 		if _, seen := files[header.Name]; seen {
 			return nil, fmt.Errorf("the backup contains %q twice", header.Name)
 		}
@@ -285,7 +294,8 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 			return nil, fmt.Errorf("the backup's config.json is not usable: %w", err)
 		}
 	}
-	if !overwrite && regular(filepath.Join(root, "config.json")) {
+	_, hasAccount := files["config.json"]
+	if hasAccount && !overwrite && regular(filepath.Join(root, "config.json")) {
 		return nil, ErrExists
 	}
 
@@ -313,10 +323,12 @@ func Restore(archive io.Reader, root string, overwrite bool) ([]string, error) {
 			return nil, err
 		}
 	}
-	for _, name := range stale {
-		if _, replaced := files[name]; !replaced {
-			if err := os.Remove(filepath.Join(root, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return nil, err
+	if hasAccount {
+		for _, name := range stale {
+			if _, replaced := files[name]; !replaced {
+				if err := os.Remove(filepath.Join(root, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return nil, err
+				}
 			}
 		}
 	}
